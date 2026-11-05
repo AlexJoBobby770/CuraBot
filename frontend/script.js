@@ -2,64 +2,87 @@
  * CuraBot+ Dashboard — script.js
  * =================================
  * Handles:
- *   1. Polling GET /api/status  every 5 s (connection indicator + state display)
- *   2. Sending POST /api/command on button clicks
- *   3. Updating the UI in real-time
- *   4. Activity log with timestamps
+ *   1. Live polling GET /api/status every 1000 ms (state + obstacle detection)
+ *   2. Real-time HC-SR04 ultrasonic distance & obstacle state visualization
+ *   3. Sending POST /api/command on button clicks (MOVE, STOP, RECEPTION)
+ *   4. State transition activity log with timestamps & duplicate prevention
  *   5. Toast notifications
  *   6. Graceful ESP32-offline error display
+ *   7. Uncompromised emergency STOP accessibility (never disabled)
  *
  * Architecture:
  *   Browser ──fetch──▶ Node.js :3000 ──http──▶ ESP32 :80
  *
- * No frameworks. Pure vanilla JS.
+ * Pure vanilla JS. No external frameworks.
  */
 
 "use strict";
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 const BACKEND_URL       = "http://localhost:3000"; // Node.js backend
-const STATUS_POLL_MS    = 5000;                    // poll ESP32 status every 5 s
+const STATUS_POLL_MS    = 1000;                    // poll ESP32 status every 1000 ms for live updates
 const CMD_TIMEOUT_LABEL = "Sending…";
 
 // ── DOM references ─────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 
-const connBadge      = $("connection-badge");
-const connDot        = $("conn-dot");
-const connLabel      = $("conn-label");
-const esp32UrlText   = $("esp32-url-text");
-const esp32UrlChip   = $("esp32-url-chip");
+const connBadge         = $("connection-badge");
+const connDot           = $("conn-dot");
+const connLabel         = $("conn-label");
+const esp32UrlText      = $("esp32-url-text");
+const esp32UrlChip      = $("esp32-url-chip");
 
-const stateRing      = $("state-ring");
-const stateEmoji     = $("state-emoji");
-const stateLabel     = $("state-label");
+const stateRing         = $("state-ring");
+const stateEmoji        = $("state-emoji");
+const stateLabel        = $("state-label");
 
-const detailLastCmd  = $("detail-last-cmd");
-const detailDest     = $("detail-destination");
-const detailCmdCount = $("detail-cmd-count");
-const detailUptime   = $("detail-uptime");
-const detailIp       = $("detail-ip");
+// Obstacle Guard DOM elements
+const obsSection        = $("obstacle-section");
+const obsIcon           = $("obs-icon");
+const obsStatusSub      = $("obs-status-sub");
+const obsBadge          = $("obs-badge");
+const obsDistanceVal    = $("obs-distance-val");
+const obsDistanceUnit   = $("obs-distance-unit");
+const obsSafetyState    = $("obs-safety-state");
+const obsAlertBanner    = $("obs-alert-banner");
+const obsAlertMsg       = $("obs-alert-msg");
+const cmdObsWarning     = $("cmd-obs-warning");
+const cmdObsWarningText = $("cmd-obs-warning-text");
 
-const destBtns       = document.querySelectorAll(".dest-btn");
-const stopBtn        = $("btn-stop");
-const returnBtn      = $("btn-return");
+// Status details DOM elements
+const detailObstacle    = $("detail-obstacle");
+const detailDistance    = $("detail-distance");
+const detailLastCmd     = $("detail-last-cmd");
+const detailDest        = $("detail-destination");
+const detailCmdCount    = $("detail-cmd-count");
+const detailUptime      = $("detail-uptime");
+const detailIp          = $("detail-ip");
 
-const logContainer   = $("log-container");
-const logEmpty       = $("log-empty");
-const clearLogBtn    = $("btn-clear-log");
+const destBtns          = document.querySelectorAll(".dest-btn");
+const stopBtn           = $("btn-stop");
+const returnBtn         = $("btn-return");
 
-const responseJson   = $("response-json");
-const respStatusBadge= $("resp-status-badge");
-const respLatency    = $("resp-latency");
+const logContainer      = $("log-container");
+const logEmpty          = $("log-empty");
+const clearLogBtn       = $("btn-clear-log");
 
-const toastContainer = $("toast-container");
-const cmdOverlay     = $("cmd-overlay");
-const cmdOverlayText = $("cmd-overlay-text");
+const responseJson      = $("response-json");
+const respStatusBadge   = $("resp-status-badge");
+const respLatency       = $("resp-latency");
+
+const toastContainer    = $("toast-container");
+const cmdOverlay        = $("cmd-overlay");
+const cmdOverlayText    = $("cmd-overlay-text");
 
 // ── App State ─────────────────────────────────────────────────────────────────
-let commandsDispatched = 0; // front-end counter (separate from ESP32's)
-let currentlyActive    = null; // the currently highlighted destination button
+let commandsDispatched       = 0;     // Front-end dispatched counter
+let currentlyActive          = null;  // Currently active destination button
+let isCommandInFlight        = false; // Request actively inflight to backend
+
+// State-transition memory to prevent log flooding
+let prevRobotState           = null;
+let prevObstacleDetected     = false;
+let prevDistanceVal          = null;
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  UI HELPERS
@@ -68,15 +91,15 @@ let currentlyActive    = null; // the currently highlighted destination button
 /**
  * Show a toast notification that auto-dismisses.
  * @param {string} message
- * @param {"success"|"error"|"info"} type
+ * @param {"success"|"error"|"info"|"warning"} type
  * @param {number} durationMs
  */
 function showToast(message, type = "info", durationMs = 4000) {
-  const icons = { success: "✓", error: "✗", info: "ℹ" };
+  const icons = { success: "✓", error: "✗", info: "ℹ", warning: "⚠️" };
 
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  toast.innerHTML = `<span>${icons[type]}</span><span>${message}</span>`;
+  toast.innerHTML = `<span>${icons[type] || "ℹ"}</span><span>${escapeHtml(message)}</span>`;
   toastContainer.appendChild(toast);
 
   setTimeout(() => {
@@ -91,7 +114,6 @@ function showToast(message, type = "info", durationMs = 4000) {
  * @param {"success"|"error"|"info"|"warning"} type
  */
 function addLog(message, type = "info") {
-  // Hide the empty-state placeholder
   if (logEmpty) logEmpty.style.display = "none";
 
   const now  = new Date();
@@ -110,7 +132,7 @@ function addLog(message, type = "info") {
   logContainer.insertBefore(entry, logContainer.firstChild);
 }
 
-/** Minimal HTML escaping to prevent XSS from server responses */
+/** Minimal HTML escaping to prevent XSS */
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -128,31 +150,39 @@ function formatUptime(seconds) {
   return `${h}h ${m}m`;
 }
 
-/** Show/hide the full-screen loading overlay */
+/** Show/hide the loading overlay */
 function setOverlay(visible, text = CMD_TIMEOUT_LABEL) {
-  cmdOverlay.hidden    = !visible;
+  cmdOverlay.hidden = !visible;
   cmdOverlay.setAttribute("aria-hidden", String(!visible));
   cmdOverlayText.textContent = text;
 }
 
-/** Disable all command buttons while a request is in-flight */
-function setButtonsDisabled(disabled) {
+/**
+ * Update button states.
+ * IMPORTANT: Emergency STOP must NEVER be disabled under any circumstance!
+ */
+function updateButtonStates(activeNavState) {
+  const isNavActive = (activeNavState === "MOVING" || activeNavState === "RETURNING" || activeNavState === "OBSTACLE");
+  const shouldDisableDest = isCommandInFlight || isNavActive;
+
   destBtns.forEach((btn) => {
-    btn.disabled = disabled;
-    btn.classList.toggle("loading", disabled);
+    btn.disabled = shouldDisableDest;
+    btn.classList.toggle("loading", isCommandInFlight);
   });
-  // STOP must remain available even while a MOVE request is being sent.
-  returnBtn.disabled = disabled;
-  returnBtn.classList.toggle("loading", disabled);
+
+  returnBtn.disabled = shouldDisableDest;
+  returnBtn.classList.toggle("loading", isCommandInFlight);
+
+  // Manual emergency STOP must remain available at ALL times
+  stopBtn.disabled = false;
+  stopBtn.classList.toggle("loading", false);
 }
 
 /** Render the ESP32 JSON response in the response card */
 function showResponse(data, ok, latencyMs) {
   const pretty = JSON.stringify(data, null, 2);
   responseJson.textContent = pretty;
-  responseJson.style.color = ok
-    ? "var(--clr-cyan)"
-    : "var(--clr-red)";
+  responseJson.style.color = ok ? "var(--clr-cyan)" : "var(--clr-red)";
 
   // Status badge
   respStatusBadge.textContent = ok ? "200 OK" : "Error";
@@ -164,38 +194,162 @@ function showResponse(data, ok, latencyMs) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  ROBOT STATE DISPLAY
+//  ROBOT STATE & OBSTACLE MAPPING
 // ═════════════════════════════════════════════════════════════════════════════
 
 const STATE_MAP = {
-  IDLE:    { emoji: "⏸",  cls: "idle",    label: "IDLE"    },
-  MOVING:  { emoji: "🚀", cls: "moving",  label: "MOVING"  },
-  RETURNING: { emoji: "↩", cls: "moving", label: "RETURNING" },
-  STOPPED: { emoji: "🛑", cls: "stopped", label: "STOPPED" },
+  IDLE:      { emoji: "⏸",  cls: "idle",      label: "IDLE"      },
+  MOVING:    { emoji: "🚀", cls: "moving",    label: "MOVING"    },
+  RETURNING: { emoji: "↩", cls: "returning", label: "RETURNING" },
+  OBSTACLE:  { emoji: "⚠️", cls: "obstacle",  label: "OBSTACLE"  },
+  STOPPED:   { emoji: "🛑", cls: "stopped",   label: "STOPPED"   },
+  ERROR:     { emoji: "❌", cls: "error",     label: "ERROR"     },
 };
+
+/**
+ * Update the obstacle detection UI based on real ESP32 readings.
+ */
+function updateObstacleDisplay(isObstacle, distStr, distNum) {
+  if (isObstacle) {
+    obsBadge.className = "obstacle-badge detected";
+    obsBadge.textContent = "DETECTED";
+    obsIcon.textContent = "🚨";
+    obsStatusSub.textContent = "Obstacle detected — Robot paused";
+
+    obsSafetyState.textContent = "PAUSED";
+    obsSafetyState.className = "obs-safety-state warning";
+
+    obsDistanceVal.className = "obs-distance-val mono warning";
+    obsDistanceVal.textContent = distStr;
+    obsDistanceUnit.style.display = (distStr === "—" || distStr === "No reading") ? "none" : "inline";
+
+    obsSection.classList.add("active-obstacle");
+    obsAlertBanner.hidden = false;
+    obsAlertMsg.textContent = distNum >= 0
+      ? `Obstacle detected at ${distStr} cm — Motors paused automatically`
+      : "Obstacle detected — Motors paused automatically";
+
+    cmdObsWarning.hidden = false;
+    cmdObsWarningText.textContent = distNum >= 0
+      ? `Robot paused: Obstacle detected within 20 cm (${distStr} cm). Waiting for path to clear...`
+      : "Robot paused: Obstacle detected within 20 cm. Waiting for path to clear...";
+
+    detailObstacle.textContent = "OBSTACLE DETECTED";
+    detailDistance.textContent = distNum >= 0 ? `${distStr} cm` : "—";
+
+  } else {
+    obsBadge.className = "obstacle-badge clear";
+    obsBadge.textContent = "CLEAR";
+    obsIcon.textContent = "🛡️";
+    obsStatusSub.textContent = "Path Clear";
+
+    obsSafetyState.textContent = "CLEAR";
+    obsSafetyState.className = "obs-safety-state";
+
+    obsDistanceVal.className = "obs-distance-val mono";
+    obsDistanceVal.textContent = distStr;
+    obsDistanceUnit.style.display = (distStr === "—" || distStr === "No reading") ? "none" : "inline";
+
+    obsSection.classList.remove("active-obstacle");
+    obsAlertBanner.hidden = true;
+    cmdObsWarning.hidden = true;
+
+    detailObstacle.textContent = "Path Clear";
+    detailDistance.textContent = distNum >= 0 ? `${distStr} cm` : "—";
+  }
+}
+
+/**
+ * Handle state transitions and append non-repeating activity log entries.
+ */
+function handleStateTransitions(currentState, isObstacleNow, distStr, distNum, esp32Status) {
+  // 1. Obstacle transition logging (logged once per transition)
+  if (!prevObstacleDetected && isObstacleNow) {
+    const atDist = (distNum >= 0) ? ` at ${distStr} cm` : "";
+    addLog(`Obstacle detected${atDist} — motors stopped.`, "warning");
+    showToast(`Obstacle detected${atDist} — Robot paused`, "warning", 3500);
+  } else if (prevObstacleDetected && !isObstacleNow) {
+    addLog("Path clear — robot resuming navigation.", "success");
+    showToast("Path clear — robot resuming navigation", "info", 3000);
+  }
+
+  // 2. Robot state transition logging
+  if (prevRobotState !== null && prevRobotState !== currentState) {
+    if (currentState === "STOPPED") {
+      addLog("Manual emergency STOP activated.", "error");
+    } else if (currentState === "ERROR") {
+      addLog("Robot reported a navigation error.", "error");
+    } else if (currentState === "IDLE" && (prevRobotState === "MOVING" || prevRobotState === "RETURNING" || prevRobotState === "OBSTACLE")) {
+      const lastCmd = (esp32Status.lastCommand || "").toUpperCase();
+      const lastDest = esp32Status.lastDestination || "";
+      if (lastCmd === "ARRIVED") {
+        addLog(`Robot arrived at destination: ${lastDest || "target location"}.`, "success");
+      } else if (lastCmd === "RETURNED" || lastDest === "RECEPTION") {
+        addLog("Robot returned to reception base.", "success");
+      } else {
+        addLog("Robot route finished — returned to IDLE.", "info");
+      }
+    }
+  }
+
+  prevRobotState = currentState;
+  prevObstacleDetected = isObstacleNow;
+}
 
 /**
  * Update the robot state ring and detail rows from an ESP32 status object.
  * @param {object} esp32Status - the `esp32Status` field from /api/status
  */
 function updateRobotState(esp32Status) {
-  const state    = (esp32Status.robotState || "IDLE").toUpperCase();
-  const stateObj = STATE_MAP[state] || STATE_MAP.IDLE;
+  const rawState = (esp32Status.robotState || "IDLE").toUpperCase();
+  const stateObj = STATE_MAP[rawState] || STATE_MAP.IDLE;
 
-  stateEmoji.textContent = stateObj.emoji;
-  stateLabel.textContent = stateObj.label;
+  // 1. Ultrasonic Distance calculation
+  let distStr = "—";
+  let distNum = -1;
+  if (esp32Status.distanceCm != null) {
+    const val = parseFloat(esp32Status.distanceCm);
+    if (!isNaN(val)) {
+      if (val >= 0) {
+        distNum = val;
+        distStr = val.toFixed(1);
+      } else {
+        distStr = "No reading";
+      }
+    }
+  }
 
-  // Update ring class
-  stateRing.className = `state-ring ${stateObj.cls}`;
+  // 2. Determine obstacle state
+  const isObstacleNow = Boolean(
+    esp32Status.obstacleDetected === true ||
+    rawState === "OBSTACLE" ||
+    (esp32Status.lastCommand || "").toUpperCase() === "OBSTACLE"
+  );
 
-  // Detail rows
+  // 3. Update Obstacle Component
+  updateObstacleDisplay(isObstacleNow, distStr, distNum);
+
+  // 4. Update Ring & State Labels
+  if (stateEmoji.textContent !== stateObj.emoji) stateEmoji.textContent = stateObj.emoji;
+  if (stateLabel.textContent !== stateObj.label) stateLabel.textContent = stateObj.label;
+
+  const targetRingClass = `state-ring ${stateObj.cls}`;
+  if (stateRing.className !== targetRingClass) {
+    stateRing.className = targetRingClass;
+  }
+
+  // 5. Update Status Detail Rows
   detailLastCmd.textContent  = esp32Status.lastCommand     || "—";
   detailDest.textContent     = esp32Status.lastDestination || "—";
   detailCmdCount.textContent = esp32Status.commandCount    ?? "—";
-  detailUptime.textContent   = esp32Status.uptime != null
-                                 ? formatUptime(esp32Status.uptime)
-                                 : "—";
+  detailUptime.textContent   = esp32Status.uptime != null ? formatUptime(esp32Status.uptime) : "—";
   detailIp.textContent       = esp32Status.ip              || "—";
+
+  // 6. Handle State Transition Logging
+  handleStateTransitions(rawState, isObstacleNow, distStr, distNum, esp32Status);
+
+  // 7. Update Button Availability
+  updateButtonStates(rawState);
 }
 
 /**
@@ -216,16 +370,15 @@ let pollTimer = null;
 
 async function pollStatus() {
   try {
-    const t0  = Date.now();
-    const res = await fetch(`${BACKEND_URL}/api/status`);
+    const t0   = Date.now();
+    const res  = await fetch(`${BACKEND_URL}/api/status`);
     const json = await res.json();
-    const ms  = Date.now() - t0;
+    const ms   = Date.now() - t0;
 
     if (json.connected && json.esp32Status) {
       updateConnectionBadge(true);
       updateRobotState(json.esp32Status);
 
-      // Show the ESP32 URL from backend config (first poll only is fine)
       if (json.esp32Url && esp32UrlText.textContent === "—") {
         esp32UrlText.textContent = json.esp32Url;
       }
@@ -233,14 +386,14 @@ async function pollStatus() {
       updateConnectionBadge(false, json.error || "ESP32 Offline");
     }
   } catch {
-    // Backend itself is unreachable (not just ESP32)
     updateConnectionBadge(false, "Backend offline");
   }
 }
 
-/** Start periodic polling. */
+/** Start periodic status polling */
 function startPolling() {
-  pollStatus(); // immediate first check
+  if (pollTimer) clearInterval(pollTimer);
+  pollStatus(); // immediate initial check
   pollTimer = setInterval(pollStatus, STATUS_POLL_MS);
 }
 
@@ -249,11 +402,14 @@ function startPolling() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 /**
- * Send a command to the backend, which will proxy it to the ESP32.
+ * Send a command to the backend, which proxies it to the ESP32.
  * @param {"MOVE"|"STOP"|"STATUS"} command
  * @param {string} [destination]
  */
 async function sendCommand(command, destination) {
+  // Prevent duplicate concurrent command requests
+  if (isCommandInFlight && command !== "STOP") return;
+
   const payload = { command, ...(destination ? { destination } : {}) };
 
   const logPrefix = destination
@@ -261,7 +417,9 @@ async function sendCommand(command, destination) {
     : `→ ${command}`;
 
   addLog(`${logPrefix} — sending…`, "info");
-  setButtonsDisabled(true);
+
+  isCommandInFlight = true;
+  updateButtonStates(prevRobotState);
   setOverlay(true, `Sending ${command}…`);
 
   const t0 = Date.now();
@@ -277,10 +435,8 @@ async function sendCommand(command, destination) {
     const latency = Date.now() - t0;
 
     if (res.ok && json.success) {
-      // ── Success ────────────────────────────────────────────────────────
       commandsDispatched++;
 
-      const ack = json.esp32Response || {};
       addLog(
         `✓ ${command}${destination ? ` → ${destination}` : ""} acknowledged by ESP32`,
         "success"
@@ -288,32 +444,31 @@ async function sendCommand(command, destination) {
       showResponse(json, true, latency);
       showToast(
         destination
-          ? `CuraBot+ dispatched to ${toTitleCase(destination)}`
+          ? (destination === "RECEPTION" ? "CuraBot+ returning to Reception" : `CuraBot+ dispatched to ${toTitleCase(destination)}`)
           : `${command} command acknowledged`,
         "success"
       );
 
-      // Refresh state immediately after a successful command
+      // Immediately poll for the updated state
       pollStatus();
 
     } else {
-      // ── Application-level error (4xx, ESP32 error etc.) ────────────────
-      const errMsg = json.error || "Unknown error";
+      const errMsg = json.error || (json.esp32Response && json.esp32Response.message) || "Command rejected";
       addLog(`✗ ${command} failed — ${errMsg}`, "error");
       showResponse(json, false, latency);
       showToast(errMsg, "error");
     }
 
   } catch (err) {
-    // ── Network error (backend not running, etc.) ─────────────────────────
     const latency = Date.now() - t0;
     const errMsg  = "Cannot reach backend — is the Node.js server running?";
     addLog(`✗ Network error — ${errMsg}`, "error");
     showResponse({ error: err.message }, false, latency);
     showToast(errMsg, "error");
   } finally {
+    isCommandInFlight = false;
     setOverlay(false);
-    setButtonsDisabled(false);
+    updateButtonStates(prevRobotState);
   }
 }
 
@@ -330,13 +485,12 @@ function toTitleCase(str) {
 //  EVENT LISTENERS
 // ═════════════════════════════════════════════════════════════════════════════
 
-/** Wire up each destination button */
+/** Destination buttons */
 destBtns.forEach((btn) => {
   btn.addEventListener("click", () => {
     const dest = btn.dataset.dest;
     if (!dest) return;
 
-    // Highlight the active destination
     destBtns.forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     currentlyActive = btn;
@@ -345,25 +499,22 @@ destBtns.forEach((btn) => {
   });
 });
 
-/** Return-to-reception button */
+/** Return to Reception button */
 returnBtn.addEventListener("click", () => {
   destBtns.forEach((b) => b.classList.remove("active"));
   currentlyActive = null;
   sendCommand("MOVE", "RECEPTION");
 });
 
-/** STOP button */
+/** Manual Emergency STOP button (Always accessible) */
 stopBtn.addEventListener("click", () => {
-  // Remove destination highlight — robot is stopping
   destBtns.forEach((b) => b.classList.remove("active"));
   currentlyActive = null;
-
   sendCommand("STOP");
 });
 
-/** Clear the activity log */
+/** Clear activity log */
 clearLogBtn.addEventListener("click", () => {
-  // Remove all entries except the empty-state div
   const entries = logContainer.querySelectorAll(".log-entry");
   entries.forEach((e) => e.remove());
   if (logEmpty) logEmpty.style.display = "";
@@ -381,7 +532,7 @@ async function fetchConfig() {
       esp32UrlText.textContent = json.esp32Url;
     }
   } catch {
-    // Backend not yet running — URL chip stays as "—"
+    // Backend not yet running — URL chip remains as "—"
   }
 }
 
@@ -392,5 +543,5 @@ async function fetchConfig() {
 (function init() {
   fetchConfig();
   startPolling();
-  addLog("Dashboard initialised — polling ESP32 status…", "info");
+  addLog("Dashboard initialized — 1000ms polling active with Obstacle Guard.", "info");
 })();

@@ -88,7 +88,49 @@
           </div>
         </div>
 
+        <!-- ── Ultrasonic Obstacle Detection Component ── -->
+        <div class="obstacle-card-section" id="obstacle-section" aria-live="polite">
+          <div class="obstacle-header-row">
+            <div class="obstacle-title-wrap">
+              <span class="obstacle-icon-indicator" id="obs-icon">🛡️</span>
+              <div>
+                <div class="obstacle-section-title">Obstacle Guard</div>
+                <div class="obstacle-status-sub" id="obs-status-sub">Path Clear</div>
+              </div>
+            </div>
+            <span class="obstacle-badge clear" id="obs-badge">CLEAR</span>
+          </div>
+
+          <div class="obstacle-metric-grid">
+            <div class="obs-metric-box">
+              <span class="obs-metric-label">Front Distance</span>
+              <div class="obs-distance-val-wrap">
+                <span class="obs-distance-val mono" id="obs-distance-val">—</span>
+                <span class="obs-distance-unit" id="obs-distance-unit">cm</span>
+              </div>
+            </div>
+            <div class="obs-metric-box">
+              <span class="obs-metric-label">Proximity State</span>
+              <span class="obs-safety-state mono" id="obs-safety-state">CLEAR</span>
+            </div>
+          </div>
+
+          <!-- Active Obstacle Warning Alert Bar -->
+          <div class="obstacle-alert-banner" id="obs-alert-banner" hidden>
+            <span class="obs-alert-pulse"></span>
+            <span class="obs-alert-msg" id="obs-alert-msg">Obstacle detected — Robot paused</span>
+          </div>
+        </div>
+
         <div class="status-details">
+          <div class="detail-row">
+            <span class="detail-key">Obstacle Status</span>
+            <span class="detail-val mono" id="detail-obstacle">Path Clear</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Distance</span>
+            <span class="detail-val mono" id="detail-distance">—</span>
+          </div>
           <div class="detail-row">
             <span class="detail-key">Last Command</span>
             <span class="detail-val mono" id="detail-last-cmd">—</span>
@@ -119,6 +161,12 @@
           <h2 class="card-title">Dispatch Destination</h2>
         </div>
         <p class="card-subtitle">Select a destination to dispatch CuraBot+</p>
+
+        <!-- Persistent obstacle warning bar when paused -->
+        <div class="command-obstacle-warning" id="cmd-obs-warning" hidden>
+          <span class="warn-icon">⚠️</span>
+          <span class="warn-text" id="cmd-obs-warning-text">Obstacle detected within 20 cm — Robot paused</span>
+        </div>
 
         <div class="destination-grid">
           <button class="dest-btn" id="btn-pharmacy"      data-dest="PHARMACY"      aria-label="Send to Pharmacy">

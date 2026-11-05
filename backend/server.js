@@ -168,9 +168,11 @@ app.post("/api/command", async (req, res) => {
       });
     } else {
       console.warn(`  ← ESP32 returned HTTP ${statusCode}: ${JSON.stringify(data)}`);
-      return res.status(502).json({
+      const errorMsg = (data && (data.message || data.error)) || `ESP32 returned status ${statusCode}`;
+      const forwardStatus = (statusCode >= 400 && statusCode < 600) ? statusCode : 502;
+      return res.status(forwardStatus).json({
         success: false,
-        error: `ESP32 returned unexpected status ${statusCode}`,
+        error: errorMsg,
         esp32Response: data,
       });
     }

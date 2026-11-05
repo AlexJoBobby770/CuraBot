@@ -323,12 +323,200 @@ body {
   color:         var(--clr-cyan);
 }
 
-/* State-specific ring colors */
-.state-ring.idle     { background: conic-gradient(var(--clr-text-muted) 0%, transparent 50%); }
-.state-ring.moving   { background: conic-gradient(var(--clr-cyan) 0%, var(--clr-blue) 60%, transparent 70%); animation-duration: 1.2s; }
-.state-ring.stopped  { background: conic-gradient(var(--clr-red) 0%, transparent 40%); animation: none; }
+/* State-specific ring colors & labels */
+.state-ring.idle      { background: conic-gradient(var(--clr-text-muted) 0%, transparent 50%); }
+.state-ring.moving    { background: conic-gradient(var(--clr-cyan) 0%, var(--clr-blue) 60%, transparent 70%); animation-duration: 1.2s; }
+.state-ring.returning { background: conic-gradient(var(--clr-blue) 0%, var(--clr-cyan) 60%, transparent 70%); animation-duration: 1.5s; }
+.state-ring.obstacle  { background: conic-gradient(var(--clr-yellow) 0%, var(--clr-red) 70%, transparent 80%); animation: spin-ring 0.9s linear infinite, pulse-obstacle 1.2s ease-in-out infinite alternate; }
+.state-ring.stopped   { background: conic-gradient(var(--clr-red) 0%, transparent 40%); animation: none; }
+.state-ring.error     { background: conic-gradient(var(--clr-red) 0%, #b91c1c 70%, transparent 80%); animation: none; }
+
+.state-ring.obstacle .state-label { color: #f87171; }
+.state-ring.error .state-label    { color: var(--clr-red); }
+.state-ring.returning .state-label{ color: var(--clr-blue); }
+.state-ring.stopped .state-label  { color: var(--clr-red); }
+.state-ring.idle .state-label     { color: var(--clr-text-muted); }
+
+@keyframes pulse-obstacle {
+  from { filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.4)); }
+  to   { filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.85)); }
+}
 
 @keyframes spin-ring { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ── Ultrasonic Obstacle Section ─────────────────────────────────────────── */
+.obstacle-card-section {
+  display:         flex;
+  flex-direction:  column;
+  gap:             12px;
+  padding:         16px;
+  margin-bottom:   16px;
+  background:      rgba(0,0,0,0.25);
+  border:          1px solid var(--clr-border);
+  border-radius:   var(--r-md);
+  transition:      all var(--t-medium) var(--ease);
+}
+.obstacle-card-section.active-obstacle {
+  border-color: rgba(239, 68, 68, 0.5);
+  background:   rgba(239, 68, 68, 0.08);
+  box-shadow:   0 0 20px rgba(239, 68, 68, 0.15);
+}
+.obstacle-card-section.active-resuming {
+  border-color: rgba(245, 158, 11, 0.5);
+  background:   rgba(245, 158, 11, 0.08);
+}
+
+.obstacle-header-row {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  gap:             10px;
+}
+.obstacle-title-wrap {
+  display:     flex;
+  align-items: center;
+  gap:         10px;
+}
+.obstacle-icon-indicator {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.obstacle-section-title {
+  font-size:   0.84rem;
+  font-weight: 700;
+  color:       var(--clr-text-primary);
+  letter-spacing: 0.02em;
+}
+.obstacle-status-sub {
+  font-size: 0.72rem;
+  color:     var(--clr-text-muted);
+}
+
+.obstacle-badge {
+  display:        inline-flex;
+  align-items:    center;
+  padding:        3px 10px;
+  border-radius:  999px;
+  font-family:    var(--font-mono);
+  font-size:      0.7rem;
+  font-weight:    700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition:     all var(--t-fast) var(--ease);
+}
+.obstacle-badge.clear {
+  background:   var(--clr-green-dim);
+  border:       1px solid rgba(34, 197, 94, 0.35);
+  color:        var(--clr-green);
+}
+.obstacle-badge.detected {
+  background:   var(--clr-red-dim);
+  border:       1px solid rgba(239, 68, 68, 0.5);
+  color:        #ff6b6b;
+  animation:    pulse-obs-badge 1s ease-in-out infinite alternate;
+}
+.obstacle-badge.resuming {
+  background:   var(--clr-yellow-dim);
+  border:       1px solid rgba(245, 158, 11, 0.4);
+  color:        var(--clr-yellow);
+}
+@keyframes pulse-obs-badge {
+  from { box-shadow: 0 0 2px rgba(239, 68, 68, 0.3); }
+  to   { box-shadow: 0 0 10px rgba(239, 68, 68, 0.7); }
+}
+
+.obstacle-metric-grid {
+  display:               grid;
+  grid-template-columns: 1fr 1fr;
+  gap:                   10px;
+}
+.obs-metric-box {
+  display:        flex;
+  flex-direction: column;
+  gap:            3px;
+  padding:        10px 12px;
+  background:     rgba(0,0,0,0.3);
+  border:         1px solid rgba(255,255,255,0.04);
+  border-radius:  var(--r-sm);
+}
+.obs-metric-label {
+  font-size:      0.68rem;
+  font-weight:    500;
+  color:          var(--clr-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.obs-distance-val-wrap {
+  display:     flex;
+  align-items: baseline;
+  gap:         4px;
+}
+.obs-distance-val {
+  font-size:   1.15rem;
+  font-weight: 700;
+  color:       var(--clr-cyan);
+}
+.obs-distance-val.warning {
+  color: #ff6b6b;
+}
+.obs-distance-unit {
+  font-size: 0.75rem;
+  color:     var(--clr-text-muted);
+}
+.obs-safety-state {
+  font-size:   0.88rem;
+  font-weight: 700;
+  color:       var(--clr-green);
+  margin-top:  2px;
+}
+.obs-safety-state.warning { color: var(--clr-red); }
+.obs-safety-state.caution { color: var(--clr-yellow); }
+
+/* Obstacle alert banner in status card */
+.obstacle-alert-banner {
+  display:       flex;
+  align-items:   center;
+  gap:           10px;
+  padding:       10px 12px;
+  background:    rgba(239, 68, 68, 0.15);
+  border:        1px solid rgba(239, 68, 68, 0.4);
+  border-radius: var(--r-sm);
+  animation:     slideInLog var(--t-medium) var(--ease) both;
+}
+.obstacle-alert-banner[hidden] { display: none; }
+.obs-alert-pulse {
+  width:         10px;
+  height:        10px;
+  border-radius: 50%;
+  background:    var(--clr-red);
+  box-shadow:    0 0 10px var(--clr-red);
+  animation:     pulse-dot 1s ease-in-out infinite;
+  flex-shrink:   0;
+}
+.obs-alert-msg {
+  font-size:   0.78rem;
+  font-weight: 600;
+  color:       #ff7675;
+  line-height: 1.35;
+}
+
+/* Command section obstacle warning notice */
+.command-obstacle-warning {
+  display:       flex;
+  align-items:   center;
+  gap:           10px;
+  padding:       12px 16px;
+  margin-bottom: 16px;
+  background:    rgba(245, 158, 11, 0.12);
+  border:        1px solid rgba(245, 158, 11, 0.4);
+  border-radius: var(--r-md);
+  color:         #fbbf24;
+  font-size:     0.84rem;
+  font-weight:   600;
+  animation:     slideInLog var(--t-medium) var(--ease) both;
+}
+.command-obstacle-warning[hidden] { display: none; }
+.warn-icon { font-size: 1.15rem; }
 
 /* Status detail rows */
 .status-details { display: flex; flex-direction: column; gap: 10px; }

@@ -5,11 +5,10 @@
 #include <string.h>
 
 // =====================================================
-// CURABOT+ - NAVIGATION + HTTP CONTROL
-// Based on the user's existing encoder navigation sketch.
+// CURABOT+ - ENCODER NAVIGATION + HC-SR04 OBSTACLE GUARD + HTTP CONTROL
 // =====================================================
 
-// ---------- Wi-Fi: EDIT THESE TWO VALUES ----------
+// ---------- Wi-Fi Credentials ----------
 const char* WIFI_SSID = "Alex Jo";
 const char* WIFI_PASSWORD = "18052005";
 
@@ -24,12 +23,23 @@ WebServer server(80);
 #define IN4 13
 
 // ---------- VERIFIED PHYSICAL ENCODER MAPPING ----------
-// Physical LEFT motor  -> GPIO 32/33
-// Physical RIGHT motor -> GPIO 18/19
-#define LEFT_A  32
-#define LEFT_B  33
-#define RIGHT_A 18
-#define RIGHT_B 19
+// Physical LEFT motor  -> GPIO 18/19
+// Physical RIGHT motor -> GPIO 32/33
+#define LEFT_A  18
+#define LEFT_B  19
+#define RIGHT_A 32
+#define RIGHT_B 33
+
+// ---------- HC-SR04 ULTRASONIC SENSOR ----------
+#define TRIG_PIN 4
+#define ECHO_PIN 35
+
+// ---------- OBSTACLE THRESHOLDS (HYSTERESIS) ----------
+const float OBSTACLE_STOP_THRESHOLD_CM  = 20.0f; // <= 20cm triggers obstacle stop
+const float OBSTACLE_CLEAR_THRESHOLD_CM = 25.0f; // >= 25cm required to resume
+
+volatile float currentDistanceCm = -1.0f;
+volatile bool obstacleDetected = false;
 
 // ---------- CALIBRATION: PRESERVED FROM YOUR TEST ----------
 const float COUNTS_PER_CM = 140.0;
@@ -63,6 +73,7 @@ enum RobotState : uint8_t {
   STATE_IDLE,
   STATE_MOVING,
   STATE_RETURNING,
+  STATE_OBSTACLE,
   STATE_STOPPED,
   STATE_ERROR
 };
@@ -95,6 +106,25 @@ const RouteStep ROUTE_WARD_A[] = {{'F'}};
 const RouteStep ROUTE_WARD_B[] = {{'F'}, {'R'}, {'F'}};
 const RouteStep ROUTE_PHARMACY[] = {{'F'}, {'R'}, {'F'}, {'R'}, {'F'}};
 const RouteStep ROUTE_EMERGENCY[] = {{'F'}, {'L'}, {'F'}};
+
+// =====================================================
+// ULTRASONIC SENSOR MEASUREMENT
+// =====================================================
+float readUltrasonicDistanceCm() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  // 25 ms timeout (~4.3 meters max)
+  long duration = pulseIn(ECHO_PIN, HIGH, 25000);
+  if (duration <= 0) {
+    return -1.0f; // No echo or out of range
+  }
+  float distance = (duration * 0.0343f) / 2.0f;
+  return distance;
+}
 
 // =====================================================
 // ENCODER INTERRUPTS
@@ -167,8 +197,7 @@ void setMotorPWM(int leftPWM, int rightPWM) {
 }
 
 // =====================================================
-// STRAIGHT MOVEMENT - ORIGINAL ENCODER/SPEED-CORRECTION LOGIC
-// Extended to support backward travel and STOP requests.
+// STRAIGHT MOVEMENT - ENCODER SPEED-CORRECTION + OBSTACLE GUARD
 // =====================================================
 bool moveDistance(float distanceCM, bool backwards) {
   long target = (long)(distanceCM * COUNTS_PER_CM);
@@ -189,6 +218,7 @@ bool moveDistance(float distanceCM, bool backwards) {
 
   unsigned long startTime = millis();
   unsigned long lastUpdate = millis();
+  unsigned long lastSensorCheck = 0;
   long previousLeft = 0;
   long previousRight = 0;
   bool leftFinished = false;
@@ -197,7 +227,70 @@ bool moveDistance(float distanceCM, bool backwards) {
   while (!leftFinished || !rightFinished) {
     if (stopRequested) {
       stopMotors();
+      obstacleDetected = false;
       return false;
+    }
+
+    // ── Ultrasonic Obstacle Check (Forward travel only) ──
+    if (!backwards && (millis() - lastSensorCheck >= 80)) {
+      lastSensorCheck = millis();
+      float dist = readUltrasonicDistanceCm();
+      if (dist > 0) {
+        currentDistanceCm = dist;
+      }
+
+      if (dist > 0 && dist <= OBSTACLE_STOP_THRESHOLD_CM) {
+        // Confirmation reading
+        delay(10);
+        float confirmDist = readUltrasonicDistanceCm();
+        if (confirmDist > 0) currentDistanceCm = confirmDist;
+
+        if (confirmDist > 0 && confirmDist <= OBSTACLE_STOP_THRESHOLD_CM) {
+          Serial.printf("OBSTACLE DETECTED at %.1f cm! Pausing motors.\n", currentDistanceCm);
+          stopMotors();
+          obstacleDetected = true;
+          RobotState savedState = robotState;
+          robotState = STATE_OBSTACLE;
+
+          unsigned long pauseStartTime = millis();
+          int clearConsecutiveCount = 0;
+
+          // Pause loop: Wait until obstacle clears or emergency STOP requested
+          while (!stopRequested) {
+            delay(100);
+            float waitDist = readUltrasonicDistanceCm();
+            if (waitDist > 0) currentDistanceCm = waitDist;
+
+            if (waitDist >= OBSTACLE_CLEAR_THRESHOLD_CM) {
+              clearConsecutiveCount++;
+              if (clearConsecutiveCount >= 3) {
+                Serial.printf("Obstacle cleared (%.1f cm). Resuming navigation.\n", waitDist);
+                break;
+              }
+            } else {
+              clearConsecutiveCount = 0;
+            }
+          }
+
+          unsigned long pauseDuration = millis() - pauseStartTime;
+          // Exclude paused time from movement timeout
+          startTime += pauseDuration;
+          lastUpdate = millis();
+
+          if (stopRequested) {
+            stopMotors();
+            obstacleDetected = false;
+            return false;
+          }
+
+          // Resume movement
+          obstacleDetected = false;
+          robotState = savedState;
+          setLeftForward();
+          setRightForward();
+          setMotorPWM(BASE_PWM, BASE_PWM);
+        }
+      }
     }
 
     long left, right;
@@ -236,12 +329,14 @@ bool moveDistance(float distanceCM, bool backwards) {
     if (millis() - startTime > MOVE_TIMEOUT) {
       Serial.println("STRAIGHT MOVEMENT TIMEOUT!");
       stopMotors();
+      obstacleDetected = false;
       return false;
     }
     delay(2);
   }
 
   stopMotors();
+  obstacleDetected = false;
   long finalLeft, finalRight;
   readEncoders(finalLeft, finalRight);
   Serial.printf("Straight result - left: %ld, right: %ld\n", finalLeft, finalRight);
@@ -257,7 +352,7 @@ bool moveBackward(float distanceCM) {
 }
 
 // =====================================================
-// PIVOT TURNS - SAME ENCODER-BASED GEOMETRY AS ORIGINAL
+// PIVOT TURNS - ENCODER-BASED GEOMETRY
 // =====================================================
 bool turnPivot(bool rightTurn) {
   float turnDistance = PI * TRACK_WIDTH_CM / 4.0;
@@ -372,12 +467,13 @@ String jsonStringField(const String& body, const char* key) {
 
 const char* stateName() {
   switch (robotState) {
-    case STATE_MOVING: return "MOVING";
+    case STATE_MOVING:    return "MOVING";
     case STATE_RETURNING: return "RETURNING";
-    case STATE_STOPPED: return "STOPPED";
-    case STATE_ERROR: return "ERROR";
+    case STATE_OBSTACLE:  return "OBSTACLE";
+    case STATE_STOPPED:   return "STOPPED";
+    case STATE_ERROR:     return "ERROR";
     case STATE_IDLE:
-    default: return "IDLE";
+    default:              return "IDLE";
   }
 }
 
@@ -389,7 +485,13 @@ String makeStatusJson() {
   json += "\"lastDestination\":\"" + String(lastDestination) + "\",";
   json += "\"commandCount\":" + String(commandCount) + ",";
   json += "\"uptime\":" + String(millis() / 1000) + ",";
-  json += "\"ip\":\"" + ip + "\"";
+  json += "\"ip\":\"" + ip + "\",";
+  json += "\"obstacleDetected\":" + String(obstacleDetected ? "true" : "false") + ",";
+  if (currentDistanceCm >= 0) {
+    json += "\"distanceCm\":" + String(currentDistanceCm, 1);
+  } else {
+    json += "\"distanceCm\":-1";
+  }
   json += "}";
   return json;
 }
@@ -439,13 +541,14 @@ void navigationTask(void* parameter) {
   }
 
   stopMotors();
+  obstacleDetected = false;
 
   if (stopRequested) {
-    atBase = false; // exact position is unknown after an interrupted route
+    atBase = false; // Position is unknown after interruption
     robotState = STATE_STOPPED;
     strncpy(lastCommand, "STOP", sizeof(lastCommand) - 1);
   } else if (!success) {
-    atBase = false; // timeout/failure may leave the robot partway along the route
+    atBase = false;
     robotState = STATE_ERROR;
     strncpy(lastCommand, "ERROR", sizeof(lastCommand) - 1);
   } else if (returning) {
@@ -469,6 +572,11 @@ void navigationTask(void* parameter) {
 // HTTP ENDPOINTS
 // =====================================================
 void handleStatus() {
+  // If idle and not actively navigating, take a quick ambient distance reading
+  if (!navigationRunning) {
+    float ambientDist = readUltrasonicDistanceCm();
+    if (ambientDist > 0) currentDistanceCm = ambientDist;
+  }
   sendJson(200, makeStatusJson());
 }
 
@@ -486,6 +594,7 @@ void handleCommand() {
   if (command == "STOP") {
     stopRequested = true;
     stopMotors();
+    obstacleDetected = false;
     robotState = STATE_STOPPED;
     strncpy(lastCommand, "STOP", sizeof(lastCommand) - 1);
     sendJson(200, "{\"success\":true,\"message\":\"Stop requested\"}");
@@ -510,7 +619,7 @@ void handleCommand() {
   bool returning = (destination == "RECEPTION" || destination == "BASE");
 
   if (returning) {
-    if (atBase || !hasSavedRoute || robotState != STATE_IDLE) {
+    if (atBase || !hasSavedRoute || (robotState != STATE_IDLE && robotState != STATE_STOPPED)) {
       sendJson(409, "{\"success\":false,\"message\":\"Return is available only after a completed destination route\"}");
       return;
     }
@@ -565,6 +674,7 @@ void handleOptions() {
 void setup() {
   Serial.begin(115200);
 
+  // Motor pins
   pinMode(ENA, OUTPUT);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
@@ -572,10 +682,16 @@ void setup() {
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
 
+  // Encoder pins
   pinMode(LEFT_A, INPUT);
   pinMode(LEFT_B, INPUT);
   pinMode(RIGHT_A, INPUT);
   pinMode(RIGHT_B, INPUT);
+
+  // Ultrasonic sensor pins
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  digitalWrite(TRIG_PIN, LOW);
 
   prevLeft = (digitalRead(LEFT_A) << 1) | digitalRead(LEFT_B);
   prevRight = (digitalRead(RIGHT_A) << 1) | digitalRead(RIGHT_B);
@@ -587,7 +703,7 @@ void setup() {
 
   stopMotors();
 
-  Serial.println("\nCuraBot+ booting...");
+  Serial.println("\nCuraBot+ booting with HC-SR04 Obstacle Guard...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -616,6 +732,7 @@ void setup() {
   server.begin();
 
   Serial.println("HTTP server ready on port 80.");
+  Serial.println("Obstacle Guard Active (TRIG=4, ECHO=35).");
   Serial.println("Waiting for dashboard commands.");
 }
 
