@@ -233,10 +233,17 @@ body {
    ═══════════════════════════════════════════════════════════════════════════ */
 .main-grid {
   display: grid;
-  grid-template-columns: 340px 1fr;
-  grid-template-rows: auto auto;
+  grid-template-columns: 360px 1fr;
   gap: 20px;
+  align-items: start;
 }
+
+/* Column placement */
+.card-status { grid-column: 1; }
+.card-response { grid-column: 1; }
+.card-compartment { grid-column: 2; }
+.card-commands { grid-column: 2; }
+.card-log { grid-column: 2; }
 
 /* ── Card base ───────────────────────────────────────────────────────────── */
 .card {
@@ -258,7 +265,7 @@ body {
   gap:          10px;
   margin-bottom: 20px;
 }
-.card-icon { font-size: 1.2rem; }
+.card-icon { font-size: 1.25rem; }
 .card-title {
   font-size:   1rem;
   font-weight: 700;
@@ -273,12 +280,7 @@ body {
   margin-top: -12px;
 }
 
-/* ── Card: Status (left column, spans 2 rows) ────────────────────────────── */
-.card-status {
-  grid-column: 1;
-  grid-row:    1 / 3;
-}
-
+/* ── Card: Status (left column) ─────────────────────────────────────────── */
 /* Robot state ring */
 .robot-state-display {
   display:         flex;
@@ -361,10 +363,6 @@ body {
   background:   rgba(239, 68, 68, 0.08);
   box-shadow:   0 0 20px rgba(239, 68, 68, 0.15);
 }
-.obstacle-card-section.active-resuming {
-  border-color: rgba(245, 158, 11, 0.5);
-  background:   rgba(245, 158, 11, 0.08);
-}
 
 .obstacle-header-row {
   display:         flex;
@@ -377,20 +375,14 @@ body {
   align-items: center;
   gap:         10px;
 }
-.obstacle-icon-indicator {
-  font-size: 1.35rem;
-  line-height: 1;
-}
+.obstacle-icon-indicator { font-size: 1.35rem; line-height: 1; }
 .obstacle-section-title {
   font-size:   0.84rem;
   font-weight: 700;
   color:       var(--clr-text-primary);
   letter-spacing: 0.02em;
 }
-.obstacle-status-sub {
-  font-size: 0.72rem;
-  color:     var(--clr-text-muted);
-}
+.obstacle-status-sub { font-size: 0.72rem; color: var(--clr-text-muted); }
 
 .obstacle-badge {
   display:        inline-flex;
@@ -414,11 +406,6 @@ body {
   border:       1px solid rgba(239, 68, 68, 0.5);
   color:        #ff6b6b;
   animation:    pulse-obs-badge 1s ease-in-out infinite alternate;
-}
-.obstacle-badge.resuming {
-  background:   var(--clr-yellow-dim);
-  border:       1px solid rgba(245, 158, 11, 0.4);
-  color:        var(--clr-yellow);
 }
 @keyframes pulse-obs-badge {
   from { box-shadow: 0 0 2px rgba(239, 68, 68, 0.3); }
@@ -456,13 +443,8 @@ body {
   font-weight: 700;
   color:       var(--clr-cyan);
 }
-.obs-distance-val.warning {
-  color: #ff6b6b;
-}
-.obs-distance-unit {
-  font-size: 0.75rem;
-  color:     var(--clr-text-muted);
-}
+.obs-distance-val.warning { color: #ff6b6b; }
+.obs-distance-unit { font-size: 0.75rem; color: var(--clr-text-muted); }
 .obs-safety-state {
   font-size:   0.88rem;
   font-weight: 700;
@@ -470,7 +452,6 @@ body {
   margin-top:  2px;
 }
 .obs-safety-state.warning { color: var(--clr-red); }
-.obs-safety-state.caution { color: var(--clr-yellow); }
 
 /* Obstacle alert banner in status card */
 .obstacle-alert-banner {
@@ -500,24 +481,6 @@ body {
   line-height: 1.35;
 }
 
-/* Command section obstacle warning notice */
-.command-obstacle-warning {
-  display:       flex;
-  align-items:   center;
-  gap:           10px;
-  padding:       12px 16px;
-  margin-bottom: 16px;
-  background:    rgba(245, 158, 11, 0.12);
-  border:        1px solid rgba(245, 158, 11, 0.4);
-  border-radius: var(--r-md);
-  color:         #fbbf24;
-  font-size:     0.84rem;
-  font-weight:   600;
-  animation:     slideInLog var(--t-medium) var(--ease) both;
-}
-.command-obstacle-warning[hidden] { display: none; }
-.warn-icon { font-size: 1.15rem; }
-
 /* Status detail rows */
 .status-details { display: flex; flex-direction: column; gap: 10px; }
 
@@ -544,11 +507,231 @@ body {
 }
 .mono { font-family: var(--font-mono); }
 
-/* ── Card: Commands ──────────────────────────────────────────────────────── */
-.card-commands {
-  grid-column: 2;
-  grid-row:    1;
+/* ═══════════════════════════════════════════════════════════════════════════
+   MEDICINE COMPARTMENT & RFID SECURITY CARD
+   ═══════════════════════════════════════════════════════════════════════════ */
+.card-compartment {
+  position: relative;
+  overflow: hidden;
 }
+
+.compartment-live-pill {
+  padding:        4px 12px;
+  border-radius:  999px;
+  font-family:    var(--font-mono);
+  font-size:      0.72rem;
+  font-weight:    700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition:     all var(--t-fast) var(--ease);
+}
+.compartment-live-pill.locked {
+  background:   rgba(14, 165, 233, 0.15);
+  border:       1px solid rgba(14, 165, 233, 0.4);
+  color:        var(--clr-blue);
+}
+.compartment-live-pill.open {
+  background:   rgba(34, 197, 94, 0.18);
+  border:       1px solid rgba(34, 197, 94, 0.5);
+  color:        var(--clr-green);
+  box-shadow:   0 0 12px rgba(34, 197, 94, 0.3);
+  animation:    pulse-obs-badge 1.5s ease-in-out infinite alternate;
+}
+.compartment-live-pill.awaiting {
+  background:   rgba(245, 158, 11, 0.15);
+  border:       1px solid rgba(245, 158, 11, 0.4);
+  color:        var(--clr-yellow);
+}
+.compartment-live-pill.denied {
+  background:   rgba(239, 68, 68, 0.15);
+  border:       1px solid rgba(239, 68, 68, 0.45);
+  color:        #ff6b6b;
+}
+
+.compartment-display-grid {
+  display:               grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap:                   16px;
+  margin-bottom:         14px;
+}
+
+.compartment-visual-box {
+  display:         flex;
+  flex-direction:  column;
+  align-items:     center;
+  justify-content: center;
+  text-align:      center;
+  padding:         20px 16px;
+  background:      rgba(0,0,0,0.3);
+  border:          1px solid var(--clr-border);
+  border-radius:   var(--r-md);
+  transition:      all var(--t-medium) var(--ease);
+}
+.compartment-visual-box.open {
+  border-color: rgba(34, 197, 94, 0.45);
+  background:   linear-gradient(145deg, rgba(34, 197, 94, 0.08), rgba(10, 22, 40, 0.6));
+  box-shadow:   0 0 24px rgba(34, 197, 94, 0.15);
+}
+.compartment-visual-box.awaiting {
+  border-color: rgba(245, 158, 11, 0.45);
+  background:   linear-gradient(145deg, rgba(245, 158, 11, 0.08), rgba(10, 22, 40, 0.6));
+}
+.compartment-visual-box.denied {
+  border-color: rgba(239, 68, 68, 0.5);
+  background:   linear-gradient(145deg, rgba(239, 68, 68, 0.1), rgba(10, 22, 40, 0.6));
+}
+
+.lock-visual-wrapper {
+  position:        relative;
+  display:         flex;
+  flex-direction:  column;
+  align-items:     center;
+  margin-bottom:   12px;
+}
+.lock-large-icon {
+  font-size:   2.8rem;
+  line-height: 1;
+  filter:      drop-shadow(0 0 10px rgba(0, 245, 212, 0.25));
+  transition:  transform var(--t-medium) var(--ease);
+}
+.compartment-visual-box.open .lock-large-icon {
+  filter: drop-shadow(0 0 16px rgba(34, 197, 94, 0.6));
+  transform: scale(1.08);
+}
+
+.servo-angle-badge {
+  margin-top:    8px;
+  padding:       3px 10px;
+  background:    rgba(0,0,0,0.4);
+  border:        1px solid var(--clr-border);
+  border-radius: 999px;
+  font-family:   var(--font-mono);
+  font-size:     0.7rem;
+  font-weight:   700;
+  color:         var(--clr-cyan);
+  letter-spacing: 0.05em;
+}
+.compartment-visual-box.open .servo-angle-badge {
+  color:        var(--clr-green);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.compartment-state-headline {
+  font-size:   0.92rem;
+  font-weight: 700;
+  color:       var(--clr-text-primary);
+  margin-bottom: 4px;
+}
+.compartment-state-sub {
+  font-size: 0.76rem;
+  color:     var(--clr-text-muted);
+  line-height: 1.4;
+}
+
+/* Authentication specs list */
+.auth-details-panel {
+  display:        flex;
+  flex-direction: column;
+  gap:            8px;
+  justify-content: center;
+}
+.auth-row {
+  display:         flex;
+  justify-content: space-between;
+  align-items:     center;
+  padding:         9px 12px;
+  background:      rgba(0,0,0,0.22);
+  border:          1px solid rgba(255,255,255,0.04);
+  border-radius:   var(--r-sm);
+  font-size:       0.8rem;
+}
+.auth-label {
+  color:          var(--clr-text-secondary);
+  font-size:      0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.auth-value {
+  color:       var(--clr-text-primary);
+  font-weight: 600;
+}
+
+.auth-stage-badge {
+  padding:        2px 8px;
+  border-radius:  999px;
+  font-family:    var(--font-mono);
+  font-size:      0.68rem;
+  font-weight:    700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.auth-stage-badge.idle        { background: rgba(255,255,255,0.06); color: var(--clr-text-muted); }
+.auth-stage-badge.navigating  { background: var(--clr-blue-dim); color: var(--clr-blue); border: 1px solid rgba(14,165,233,0.3); }
+.auth-stage-badge.awaiting    { background: var(--clr-yellow-dim); color: var(--clr-yellow); border: 1px solid rgba(245,158,11,0.4); animation: pulse-obs-badge 1.5s infinite; }
+.auth-stage-badge.granted     { background: var(--clr-green-dim); color: var(--clr-green); border: 1px solid rgba(34,197,94,0.4); }
+.auth-stage-badge.dispensed   { background: var(--clr-cyan-dim); color: var(--clr-cyan); border: 1px solid rgba(0,245,212,0.4); }
+.auth-stage-badge.completed   { background: var(--clr-green-dim); color: var(--clr-green); border: 1px solid rgba(34,197,94,0.4); }
+.auth-stage-badge.denied      { background: var(--clr-red-dim); color: #ff6b6b; border: 1px solid rgba(239,68,68,0.4); }
+
+/* Context RFID Event Banner */
+.rfid-event-banner {
+  display:       flex;
+  align-items:   center;
+  gap:           10px;
+  padding:       10px 14px;
+  background:    rgba(0, 245, 212, 0.06);
+  border:        1px solid rgba(0, 245, 212, 0.25);
+  border-radius: var(--r-sm);
+  font-size:     0.8rem;
+  font-weight:   500;
+  animation:     slideInLog var(--t-medium) var(--ease) both;
+}
+.rfid-event-banner[hidden] { display: none; }
+.rfid-event-banner.success {
+  background:   rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.4);
+  color:        var(--clr-green);
+}
+.rfid-event-banner.warning {
+  background:   rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.45);
+  color:        #fbbf24;
+}
+.rfid-event-banner.error {
+  background:   rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.45);
+  color:        #ff7675;
+}
+.rfid-event-icon { font-size: 1.1rem; }
+.rfid-event-msg { flex: 1; line-height: 1.4; }
+
+/* ── Card: Commands ──────────────────────────────────────────────────────── */
+.command-obstacle-warning,
+.command-lid-warning {
+  display:       flex;
+  align-items:   center;
+  gap:           10px;
+  padding:       12px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--r-md);
+  font-size:     0.84rem;
+  font-weight:   600;
+  animation:     slideInLog var(--t-medium) var(--ease) both;
+}
+.command-obstacle-warning[hidden],
+.command-lid-warning[hidden] { display: none; }
+
+.command-obstacle-warning {
+  background:   rgba(245, 158, 11, 0.12);
+  border:        1px solid rgba(245, 158, 11, 0.4);
+  color:         #fbbf24;
+}
+.command-lid-warning {
+  background:   rgba(239, 68, 68, 0.14);
+  border:        1px solid rgba(239, 68, 68, 0.45);
+  color:         #ff7675;
+}
+.warn-icon { font-size: 1.15rem; }
 
 /* Destination buttons grid */
 .destination-grid {
@@ -561,10 +744,10 @@ body {
 .dest-btn {
   position:       relative;
   display:        flex;
-  flex-direction: column;
-  align-items:    flex-start;
-  gap:            6px;
-  padding:        18px 20px;
+  flex-direction: row;
+  align-items:    center;
+  gap:            12px;
+  padding:        16px 18px;
   background:     var(--clr-surface-3);
   border:         1px solid var(--clr-border);
   border-radius:  var(--r-md);
@@ -607,13 +790,29 @@ body {
   opacity: 0.7;
 }
 
-.dest-icon { font-size: 1.5rem; line-height: 1; }
+.dest-icon { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
+.dest-text-wrap {
+  display:        flex;
+  flex-direction: column;
+  gap:            2px;
+  flex:           1;
+}
 .dest-name { font-size: 0.9rem; font-weight: 600; color: var(--clr-text-primary); }
 
+.dest-status-pill {
+  font-family:    var(--font-mono);
+  font-size:      0.65rem;
+  font-weight:    700;
+  color:          var(--clr-text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.dest-status-pill.navigating { color: var(--clr-blue); }
+.dest-status-pill.arrived    { color: var(--clr-yellow); }
+.dest-status-pill.open       { color: var(--clr-green); }
+.dest-status-pill.completed  { color: var(--clr-cyan); }
+
 .dest-badge {
-  position:      absolute;
-  top:           12px;
-  right:         14px;
   padding:       2px 8px;
   border-radius: 999px;
   background:    var(--clr-cyan-dim);
@@ -622,6 +821,7 @@ body {
   font-weight:   700;
   color:         var(--clr-cyan);
   letter-spacing: 0.06em;
+  flex-shrink:   0;
 }
 
 /* Emergency destination */
@@ -685,11 +885,6 @@ body {
 .stop-icon { font-size: 1.2rem; }
 
 /* ── Card: Log ───────────────────────────────────────────────────────────── */
-.card-log {
-  grid-column: 2;
-  grid-row:    2;
-}
-
 .clear-btn {
   margin-left:   auto;
   padding:       4px 12px;
@@ -783,14 +978,6 @@ body {
 }
 
 /* ── Card: Response ──────────────────────────────────────────────────────── */
-.card-response {
-  grid-column: 1;
-  grid-row:    3;
-}
-
-/* Move the response card into a sensible spot — it spans the full bottom row */
-/* We'll use a 3-row layout via overrides below */
-
 .response-box {
   background:    rgba(0,0,0,0.35);
   border:        1px solid var(--clr-border);
@@ -831,13 +1018,17 @@ body {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
   }
-  .card-status  { grid-column: 1; grid-row: auto; }
-  .card-commands{ grid-column: 1; grid-row: auto; }
-  .card-log     { grid-column: 1; grid-row: auto; }
-  .card-response{ grid-column: 1; grid-row: auto; }
+  .card-status,
+  .card-compartment,
+  .card-commands,
+  .card-log,
+  .card-response {
+    grid-column: 1;
+  }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 680px) {
+  .compartment-display-grid { grid-template-columns: 1fr; }
   .destination-grid { grid-template-columns: 1fr; }
   .app-wrapper { padding: 16px 14px 32px; }
   .header { padding: 16px; }
@@ -872,7 +1063,7 @@ body {
   font-weight:   500;
   pointer-events: auto;
   animation:     toastIn var(--t-medium) var(--ease) both;
-  max-width:     340px;
+  max-width:     360px;
 }
 .toast.exiting { animation: toastOut var(--t-medium) var(--ease) both; }
 
@@ -888,6 +1079,7 @@ body {
 .toast.success { border-color: rgba(34,197,94,0.4);  color: var(--clr-green); }
 .toast.error   { border-color: rgba(239,68,68,0.4);  color: #ff7675; }
 .toast.info    { border-color: rgba(14,165,233,0.4); color: var(--clr-blue); }
+.toast.warning { border-color: rgba(245,158,11,0.4); color: #fbbf24; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LOADING OVERLAY

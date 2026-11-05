@@ -1,11 +1,18 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include <ESP32Servo.h>
 #include <stdlib.h>
 #include <string.h>
 
+struct RouteStep {
+  char action; // F = forward, B = backward, R = right, L = left
+};
+
 // =====================================================
-// CURABOT+ - ENCODER NAVIGATION + HC-SR04 OBSTACLE GUARD + HTTP CONTROL
+// CURABOT+ - ENCODER NAVIGATION + HC-SR04 OBSTACLE GUARD + RFID MEDICINE COMPARTMENT + HTTP CONTROL
 // =====================================================
 
 // ---------- Wi-Fi Credentials ----------
@@ -33,6 +40,24 @@ WebServer server(80);
 // ---------- HC-SR04 ULTRASONIC SENSOR ----------
 #define TRIG_PIN 4
 #define ECHO_PIN 35
+
+// ---------- RFID (RC522) + MEDICINE COMPARTMENT SERVO ----------
+// RC522 uses SPI: SCK=22, MISO=21, MOSI=23, SS/SDA=5, RST=16.
+// IRQ is intentionally not connected.
+#define RFID_SS_PIN   5
+#define RFID_RST_PIN  16
+#define RFID_SCK_PIN  22
+#define RFID_MISO_PIN 21
+#define RFID_MOSI_PIN 23
+#define SERVO_PIN     17  // TX2 / GPIO17
+
+MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
+Servo medicineServo;
+
+const int LID_CLOSED_ANGLE = 30;
+const int LID_OPEN_ANGLE = 90;
+const int SERVO_STEP_DELAY_MS = 25;
+int currentServoAngle = LID_CLOSED_ANGLE;
 
 // ---------- OBSTACLE THRESHOLDS (HYSTERESIS) ----------
 const float OBSTACLE_STOP_THRESHOLD_CM  = 20.0f; // <= 20cm triggers obstacle stop
@@ -86,14 +111,22 @@ char lastCommand[20] = "BOOT";
 char lastDestination[32] = "RECEPTION";
 uint32_t commandCount = 0;
 
-struct RouteStep {
-  char action; // F = forward, B = backward, R = right, L = left
-};
-
 RouteStep savedRoute[8];
 uint8_t savedRouteLength = 0;
 bool hasSavedRoute = false;
 bool atBase = true; // becomes false after dispatch; true only after a completed return
+
+// A delivery becomes eligible for RFID access only after its route completes.
+volatile bool deliveryComplete = false;
+volatile bool lidOpen = false;
+byte openingCardUID[4] = {0, 0, 0, 0};
+char accessStatus[32] = "WAITING_FOR_DELIVERY";
+
+// Provisional card-to-destination mapping, based on the order the four UIDs were scanned.
+const byte RFID_UID_WARD_A[4] = {0x1A, 0x2A, 0xDD, 0x35};
+const byte RFID_UID_WARD_B[4] = {0xF6, 0x50, 0x2B, 0x07};
+const byte RFID_UID_PHARMACY[4] = {0x5C, 0x32, 0x24, 0x07};
+const byte RFID_UID_EMERGENCY[4] = {0x2A, 0xD2, 0xF7, 0x55};
 
 // ---------- ROUTE DEFINITIONS ----------
 // Demo map assumption (40 cm between points):
@@ -465,6 +498,97 @@ String jsonStringField(const String& body, const char* key) {
   return body.substring(firstQuote + 1, secondQuote);
 }
 
+// =====================================================
+// RFID AUTHENTICATION + SERVO COMPARTMENT CONTROL
+// =====================================================
+void moveServoSlowly(int targetAngle) {
+  targetAngle = constrain(targetAngle, 0, 180);
+
+  if (targetAngle > currentServoAngle) {
+    for (int angle = currentServoAngle; angle <= targetAngle; angle++) {
+      medicineServo.write(angle);
+      delay(SERVO_STEP_DELAY_MS);
+    }
+  } else {
+    for (int angle = currentServoAngle; angle >= targetAngle; angle--) {
+      medicineServo.write(angle);
+      delay(SERVO_STEP_DELAY_MS);
+    }
+  }
+
+  currentServoAngle = targetAngle;
+}
+
+const char* destinationForCardUID() {
+  if (rfid.uid.size != 4) return nullptr;
+
+  if (memcmp(rfid.uid.uidByte, RFID_UID_WARD_A, 4) == 0) return "WARD A";
+  if (memcmp(rfid.uid.uidByte, RFID_UID_WARD_B, 4) == 0) return "WARD B";
+  if (memcmp(rfid.uid.uidByte, RFID_UID_PHARMACY, 4) == 0) return "PHARMACY";
+  if (memcmp(rfid.uid.uidByte, RFID_UID_EMERGENCY, 4) == 0) return "EMERGENCY ROOM";
+
+  return nullptr;
+}
+
+void printScannedUID() {
+  Serial.print("RFID UID: ");
+  for (byte i = 0; i < rfid.uid.size; i++) {
+    if (rfid.uid.uidByte[i] < 0x10) Serial.print("0");
+    Serial.print(rfid.uid.uidByte[i], HEX);
+    if (i + 1 < rfid.uid.size) Serial.print(" ");
+  }
+  Serial.println();
+}
+
+void handleRFIDScan() {
+  if (!rfid.PICC_IsNewCardPresent()) return;
+  if (!rfid.PICC_ReadCardSerial()) return;
+
+  printScannedUID();
+
+  // RFID must only operate after a successful arrival and while navigation is stopped.
+  if (!deliveryComplete || navigationRunning || robotState != STATE_IDLE) {
+    strncpy(accessStatus, "NOT_AT_DELIVERY_POINT", sizeof(accessStatus) - 1);
+    Serial.println("ACCESS DENIED: robot is not waiting at a delivery point.");
+  } else if (!lidOpen) {
+    const char* cardDestination = destinationForCardUID();
+
+    if (cardDestination == nullptr) {
+      strncpy(accessStatus, "UNKNOWN_CARD", sizeof(accessStatus) - 1);
+      Serial.println("ACCESS DENIED: unknown RFID card.");
+    } else if (String(cardDestination) != String(lastDestination)) {
+      strncpy(accessStatus, "WRONG_DESTINATION", sizeof(accessStatus) - 1);
+      Serial.printf("ACCESS DENIED: card belongs to %s, robot is at %s.\n",
+                    cardDestination, lastDestination);
+    } else {
+      memcpy(openingCardUID, rfid.uid.uidByte, 4);
+      Serial.println("ACCESS GRANTED: destination and card match.");
+      moveServoSlowly(LID_OPEN_ANGLE);
+      lidOpen = true;
+      strncpy(accessStatus, "LID_OPEN", sizeof(accessStatus) - 1);
+      Serial.println("Medicine compartment OPEN (90 degrees).");
+    }
+  } else {
+    // Once opened, only the exact same card can close the compartment.
+    if (rfid.uid.size == 4 && memcmp(rfid.uid.uidByte, openingCardUID, 4) == 0) {
+      Serial.println("SAME CARD CONFIRMED: closing compartment.");
+      moveServoSlowly(LID_CLOSED_ANGLE);
+      lidOpen = false;
+      deliveryComplete = false; // This delivery has now been dispensed; no reopening.
+      strncpy(accessStatus, "DELIVERY_DISPENSED", sizeof(accessStatus) - 1);
+      Serial.println("Medicine compartment CLOSED. Delivery dispensed.");
+    } else {
+      strncpy(accessStatus, "SAME_CARD_REQUIRED", sizeof(accessStatus) - 1);
+      Serial.println("ACCESS DENIED: scan the same card that opened the compartment.");
+    }
+  }
+
+  accessStatus[sizeof(accessStatus) - 1] = '\0';
+  rfid.PICC_HaltA();
+  rfid.PCD_StopCrypto1();
+  delay(800); // brief scan debounce
+}
+
 const char* stateName() {
   switch (robotState) {
     case STATE_MOVING:    return "MOVING";
@@ -487,6 +611,9 @@ String makeStatusJson() {
   json += "\"uptime\":" + String(millis() / 1000) + ",";
   json += "\"ip\":\"" + ip + "\",";
   json += "\"obstacleDetected\":" + String(obstacleDetected ? "true" : "false") + ",";
+  json += "\"deliveryComplete\":" + String(deliveryComplete ? "true" : "false") + ",";
+  json += "\"lidOpen\":" + String(lidOpen ? "true" : "false") + ",";
+  json += "\"accessStatus\":\"" + String(accessStatus) + "\",";
   if (currentDistanceCm >= 0) {
     json += "\"distanceCm\":" + String(currentDistanceCm, 1);
   } else {
@@ -545,21 +672,29 @@ void navigationTask(void* parameter) {
 
   if (stopRequested) {
     atBase = false; // Position is unknown after interruption
+    deliveryComplete = false;
     robotState = STATE_STOPPED;
     strncpy(lastCommand, "STOP", sizeof(lastCommand) - 1);
+    strncpy(accessStatus, "NOT_AT_DELIVERY_POINT", sizeof(accessStatus) - 1);
   } else if (!success) {
     atBase = false;
+    deliveryComplete = false;
     robotState = STATE_ERROR;
     strncpy(lastCommand, "ERROR", sizeof(lastCommand) - 1);
+    strncpy(accessStatus, "NAVIGATION_ERROR", sizeof(accessStatus) - 1);
   } else if (returning) {
     robotState = STATE_IDLE;
     atBase = true;
+    deliveryComplete = false;
     strncpy(lastCommand, "RETURNED", sizeof(lastCommand) - 1);
     strncpy(lastDestination, "RECEPTION", sizeof(lastDestination) - 1);
+    strncpy(accessStatus, "WAITING_FOR_DELIVERY", sizeof(accessStatus) - 1);
   } else {
     robotState = STATE_IDLE;
     atBase = false;
+    deliveryComplete = true; // Successful route completion enables RFID access.
     strncpy(lastCommand, "ARRIVED", sizeof(lastCommand) - 1);
+    strncpy(accessStatus, "AWAITING_RFID", sizeof(accessStatus) - 1);
   }
 
   lastCommand[sizeof(lastCommand) - 1] = '\0';
@@ -592,12 +727,17 @@ void handleCommand() {
   Serial.printf("HTTP command=%s destination=%s\n", command.c_str(), destination.c_str());
 
   if (command == "STOP") {
-    stopRequested = true;
-    stopMotors();
-    obstacleDetected = false;
-    robotState = STATE_STOPPED;
-    strncpy(lastCommand, "STOP", sizeof(lastCommand) - 1);
-    sendJson(200, "{\"success\":true,\"message\":\"Stop requested\"}");
+    if (navigationRunning) {
+      stopRequested = true;
+      stopMotors();
+      obstacleDetected = false;
+      robotState = STATE_STOPPED;
+      strncpy(lastCommand, "STOP", sizeof(lastCommand) - 1);
+      sendJson(200, "{\"success\":true,\"message\":\"Stop requested\"}");
+    } else {
+      stopMotors();
+      sendJson(200, "{\"success\":true,\"message\":\"Robot is already stationary\"}");
+    }
     return;
   }
 
@@ -619,11 +759,19 @@ void handleCommand() {
   bool returning = (destination == "RECEPTION" || destination == "BASE");
 
   if (returning) {
+    if (lidOpen) {
+      sendJson(409, "{\"success\":false,\"message\":\"Close the medicine compartment with the same RFID card before returning\"}");
+      return;
+    }
     if (atBase || !hasSavedRoute || (robotState != STATE_IDLE && robotState != STATE_STOPPED)) {
       sendJson(409, "{\"success\":false,\"message\":\"Return is available only after a completed destination route\"}");
       return;
     }
   } else {
+    if (lidOpen) {
+      sendJson(409, "{\"success\":false,\"message\":\"Medicine compartment is open; close it before starting another route\"}");
+      return;
+    }
     if (!atBase) {
       sendJson(409, "{\"success\":false,\"message\":\"Robot is away from reception. Return to base before selecting another destination\"}");
       return;
@@ -635,6 +783,10 @@ void handleCommand() {
   }
 
   stopRequested = false;
+  if (!returning) {
+    deliveryComplete = false;
+    strncpy(accessStatus, "NAVIGATING", sizeof(accessStatus) - 1);
+  }
   navigationRunning = true;
   commandCount++;
   strncpy(lastCommand, returning ? "RETURN" : "MOVE", sizeof(lastCommand) - 1);
@@ -703,7 +855,24 @@ void setup() {
 
   stopMotors();
 
-  Serial.println("\nCuraBot+ booting with HC-SR04 Obstacle Guard...");
+  // Initialise the medicine compartment servo
+  medicineServo.setPeriodHertz(50);
+  medicineServo.attach(SERVO_PIN, 500, 2400);
+  medicineServo.write(LID_CLOSED_ANGLE);
+  currentServoAngle = LID_CLOSED_ANGLE;
+
+  // Initialise RC522 RFID reader
+  SPI.begin(RFID_SCK_PIN, RFID_MISO_PIN, RFID_MOSI_PIN, RFID_SS_PIN);
+  rfid.PCD_Init();
+  byte rfidVersion = rfid.PCD_ReadRegister(rfid.VersionReg);
+  Serial.printf("RC522 firmware version: 0x%02X\n", rfidVersion);
+  if (rfidVersion == 0x00 || rfidVersion == 0xFF) {
+    Serial.println("WARNING: RC522 not responding; check RFID wiring/power.");
+  } else {
+    Serial.println("RC522 RFID reader initialised.");
+  }
+
+  Serial.println("\nCuraBot+ booting with obstacle guard + RFID compartment access...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -733,11 +902,13 @@ void setup() {
 
   Serial.println("HTTP server ready on port 80.");
   Serial.println("Obstacle Guard Active (TRIG=4, ECHO=35).");
+  Serial.println("RFID access: scan destination card once to OPEN, scan same card again to CLOSE.");
   Serial.println("Waiting for dashboard commands.");
 }
 
 void loop() {
   server.handleClient();
+  handleRFIDScan();
 
   static unsigned long lastReconnectAttempt = 0;
   if (WiFi.status() != WL_CONNECTED && millis() - lastReconnectAttempt > 10000) {

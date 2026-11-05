@@ -49,7 +49,7 @@
         </div>
         <div class="brand-text">
           <h1 class="brand-name">CuraBot<span class="brand-plus">+</span></h1>
-          <p class="brand-tagline">Hospital Delivery Robot — Milestone 1</p>
+          <p class="brand-tagline">Autonomous Hospital Delivery &amp; RFID Medication Guard</p>
         </div>
       </div>
 
@@ -70,7 +70,7 @@
     ═══════════════════════════════════════════════════════ -->
     <main class="main-grid">
 
-      <!-- ── Robot Status Card ──────────────────────────────── -->
+      <!-- ── Left Column: Robot Status Card ─────────────────── -->
       <section class="card card-status" aria-label="Robot Status">
         <div class="card-header">
           <span class="card-icon">🤖</span>
@@ -154,13 +154,66 @@
         </div>
       </section>
 
-      <!-- ── Command Center ─────────────────────────────────── -->
+      <!-- ── Right Column: Medicine Compartment & RFID Security ─ -->
+      <section class="card card-compartment" aria-label="Medicine Compartment and RFID Security">
+        <div class="card-header">
+          <span class="card-icon">🔐</span>
+          <h2 class="card-title">Medicine Compartment &amp; RFID Guard</h2>
+          <span class="compartment-live-pill locked" id="comp-live-pill">LOCKED (30°)</span>
+        </div>
+
+        <div class="compartment-display-grid">
+          <!-- Left: Compartment Servo / Lock Visual State -->
+          <div class="compartment-visual-box" id="comp-visual-box">
+            <div class="lock-visual-wrapper" id="comp-lock-wrap">
+              <span class="lock-large-icon" id="comp-lock-icon">🔒</span>
+              <div class="servo-angle-badge" id="comp-servo-badge">30° CLOSED</div>
+            </div>
+            <div class="compartment-main-text">
+              <div class="compartment-state-headline" id="comp-headline">Medicine Compartment Secured</div>
+              <div class="compartment-state-sub" id="comp-subtext">Lid locked at 30° — Awaiting destination arrival</div>
+            </div>
+          </div>
+
+          <!-- Right: Delivery Authentication Specs -->
+          <div class="auth-details-panel">
+            <div class="auth-row">
+              <span class="auth-label">Delivery Target</span>
+              <span class="auth-value mono" id="auth-dest">—</span>
+            </div>
+            <div class="auth-row">
+              <span class="auth-label">Delivery Stage</span>
+              <span class="auth-stage-badge idle" id="auth-delivery-stage">AT BASE</span>
+            </div>
+            <div class="auth-row">
+              <span class="auth-label">RFID Auth Status</span>
+              <span class="auth-value mono" id="auth-access-status">WAITING FOR DELIVERY</span>
+            </div>
+            <div class="auth-row">
+              <span class="auth-label">Compartment Lid</span>
+              <span class="auth-value mono" id="auth-lid-status">LOCKED (30°)</span>
+            </div>
+            <div class="auth-row">
+              <span class="auth-label">Medication Dispensed</span>
+              <span class="auth-value mono" id="auth-dispense-status">PENDING</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Context Alert Banner (Access Denied / Awaiting Scan / Dispensed Notice) -->
+        <div class="rfid-event-banner" id="rfid-event-banner" hidden>
+          <span class="rfid-event-icon" id="rfid-event-icon">ℹ️</span>
+          <span class="rfid-event-msg" id="rfid-event-msg">Scan authorized RFID card at destination</span>
+        </div>
+      </section>
+
+      <!-- ── Right Column: Command Center ───────────────────── -->
       <section class="card card-commands" aria-label="Command Center">
         <div class="card-header">
           <span class="card-icon">🏥</span>
           <h2 class="card-title">Dispatch Destination</h2>
         </div>
-        <p class="card-subtitle">Select a destination to dispatch CuraBot+</p>
+        <p class="card-subtitle">Select an authorized hospital unit to dispatch CuraBot+</p>
 
         <!-- Persistent obstacle warning bar when paused -->
         <div class="command-obstacle-warning" id="cmd-obs-warning" hidden>
@@ -168,28 +221,46 @@
           <span class="warn-text" id="cmd-obs-warning-text">Obstacle detected within 20 cm — Robot paused</span>
         </div>
 
+        <!-- Lid Open Warning Notice (Prevents moving/returning until closed) -->
+        <div class="command-lid-warning" id="cmd-lid-warning" hidden>
+          <span class="warn-icon">⚠️</span>
+          <span class="warn-text" id="cmd-lid-warning-text">Medicine compartment is OPEN. Scan the same RFID card to close it before returning.</span>
+        </div>
+
         <div class="destination-grid">
-          <button class="dest-btn" id="btn-pharmacy"      data-dest="PHARMACY"      aria-label="Send to Pharmacy">
+          <button class="dest-btn" id="btn-pharmacy" data-dest="PHARMACY" aria-label="Send to Pharmacy">
             <span class="dest-icon">💊</span>
-            <span class="dest-name">Pharmacy</span>
+            <div class="dest-text-wrap">
+              <span class="dest-name">Pharmacy</span>
+              <span class="dest-status-pill" id="pill-pharmacy">READY</span>
+            </div>
             <span class="dest-badge">Rx</span>
           </button>
 
-          <button class="dest-btn" id="btn-ward-a"        data-dest="WARD A"        aria-label="Send to Ward A">
+          <button class="dest-btn" id="btn-ward-a" data-dest="WARD A" aria-label="Send to Ward A">
             <span class="dest-icon">🛏️</span>
-            <span class="dest-name">Ward A</span>
+            <div class="dest-text-wrap">
+              <span class="dest-name">Ward A</span>
+              <span class="dest-status-pill" id="pill-ward-a">READY</span>
+            </div>
             <span class="dest-badge">A</span>
           </button>
 
-          <button class="dest-btn" id="btn-ward-b"        data-dest="WARD B"        aria-label="Send to Ward B">
+          <button class="dest-btn" id="btn-ward-b" data-dest="WARD B" aria-label="Send to Ward B">
             <span class="dest-icon">🛏️</span>
-            <span class="dest-name">Ward B</span>
+            <div class="dest-text-wrap">
+              <span class="dest-name">Ward B</span>
+              <span class="dest-status-pill" id="pill-ward-b">READY</span>
+            </div>
             <span class="dest-badge">B</span>
           </button>
 
-          <button class="dest-btn dest-btn--emergency"    data-dest="EMERGENCY ROOM" id="btn-emergency" aria-label="Send to Emergency Room">
+          <button class="dest-btn dest-btn--emergency" data-dest="EMERGENCY ROOM" id="btn-emergency" aria-label="Send to Emergency Room">
             <span class="dest-icon">🚨</span>
-            <span class="dest-name">Emergency Room</span>
+            <div class="dest-text-wrap">
+              <span class="dest-name">Emergency Room</span>
+              <span class="dest-status-pill" id="pill-emergency">READY</span>
+            </div>
             <span class="dest-badge">ER</span>
           </button>
         </div>
@@ -206,7 +277,7 @@
         </div>
       </section>
 
-      <!-- ── Activity Log ───────────────────────────────────── -->
+      <!-- ── Right Column: Activity Log ─────────────────────── -->
       <section class="card card-log" aria-label="Activity Log">
         <div class="card-header">
           <span class="card-icon">📋</span>
@@ -221,15 +292,15 @@
         </div>
       </section>
 
-      <!-- ── Last Response Card ─────────────────────────────── -->
+      <!-- ── Bottom Row: Last Response Card ─────────────────── -->
       <section class="card card-response" aria-label="Last Response">
         <div class="card-header">
           <span class="card-icon">📡</span>
-          <h2 class="card-title">ESP32 Response</h2>
+          <h2 class="card-title">ESP32 Telemetry &amp; Response</h2>
         </div>
 
         <div class="response-box" id="response-box">
-          <pre id="response-json" class="response-json">Waiting for first command…</pre>
+          <pre id="response-json" class="response-json">Waiting for telemetry…</pre>
         </div>
 
         <div class="response-meta">
