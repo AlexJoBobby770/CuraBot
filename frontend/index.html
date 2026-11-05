@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CuraBot+ | Hospital Delivery Robot Dashboard</title>
+  <meta name="description" content="CuraBot+ real-time control dashboard for the ESP32-powered miniature hospital delivery robot." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Background particles (purely decorative) ── -->
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-glow glow-blue"  aria-hidden="true"></div>
+  <div class="bg-glow glow-cyan"  aria-hidden="true"></div>
+
+  <div class="app-wrapper">
+
+    <!-- ═══════════════════════════════════════════════════════
+         HEADER
+    ═══════════════════════════════════════════════════════ -->
+    <header class="header">
+      <div class="header-brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Robot body -->
+            <rect x="10" y="18" width="28" height="22" rx="4" fill="url(#robotGrad)" />
+            <!-- Robot head -->
+            <rect x="14" y="8"  width="20" height="12" rx="3" fill="url(#robotGrad)" />
+            <!-- Eyes -->
+            <circle cx="19" cy="14" r="2.5" fill="#00f5d4" />
+            <circle cx="29" cy="14" r="2.5" fill="#00f5d4" />
+            <!-- Cross (medical) -->
+            <rect x="21" y="23" width="6" height="12" rx="1.5" fill="white" opacity="0.9"/>
+            <rect x="18" y="26" width="12" height="6"  rx="1.5" fill="white" opacity="0.9"/>
+            <!-- Wheels -->
+            <circle cx="16" cy="40" r="4" fill="#1a2a4a" stroke="#00f5d4" stroke-width="1.5"/>
+            <circle cx="32" cy="40" r="4" fill="#1a2a4a" stroke="#00f5d4" stroke-width="1.5"/>
+            <defs>
+              <linearGradient id="robotGrad" x1="10" y1="8" x2="38" y2="40" gradientUnits="userSpaceOnUse">
+                <stop offset="0%"   stop-color="#0ea5e9" />
+                <stop offset="100%" stop-color="#0369a1" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-name">CuraBot<span class="brand-plus">+</span></h1>
+          <p class="brand-tagline">Hospital Delivery Robot — Milestone 1</p>
+        </div>
+      </div>
+
+      <div class="header-status">
+        <div class="connection-badge" id="connection-badge">
+          <span class="conn-dot" id="conn-dot"></span>
+          <span class="conn-label" id="conn-label">Checking…</span>
+        </div>
+        <div class="esp32-url-chip" id="esp32-url-chip" title="ESP32 Target URL">
+          <span class="chip-icon">⚡</span>
+          <span id="esp32-url-text">—</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════════
+         MAIN GRID
+    ═══════════════════════════════════════════════════════ -->
+    <main class="main-grid">
+
+      <!-- ── Robot Status Card ──────────────────────────────── -->
+      <section class="card card-status" aria-label="Robot Status">
+        <div class="card-header">
+          <span class="card-icon">🤖</span>
+          <h2 class="card-title">Robot Status</h2>
+        </div>
+
+        <div class="robot-state-display">
+          <div class="state-ring-wrapper" id="state-ring-wrapper">
+            <div class="state-ring" id="state-ring">
+              <div class="state-ring-inner">
+                <span class="state-emoji" id="state-emoji">⏸</span>
+                <span class="state-label" id="state-label">IDLE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="status-details">
+          <div class="detail-row">
+            <span class="detail-key">Last Command</span>
+            <span class="detail-val mono" id="detail-last-cmd">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Destination</span>
+            <span class="detail-val mono" id="detail-destination">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Commands Sent</span>
+            <span class="detail-val mono" id="detail-cmd-count">0</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Robot Uptime</span>
+            <span class="detail-val mono" id="detail-uptime">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">ESP32 IP</span>
+            <span class="detail-val mono" id="detail-ip">—</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Command Center ─────────────────────────────────── -->
+      <section class="card card-commands" aria-label="Command Center">
+        <div class="card-header">
+          <span class="card-icon">🏥</span>
+          <h2 class="card-title">Dispatch Destination</h2>
+        </div>
+        <p class="card-subtitle">Select a destination to dispatch CuraBot+</p>
+
+        <div class="destination-grid">
+          <button class="dest-btn" id="btn-pharmacy"      data-dest="PHARMACY"      aria-label="Send to Pharmacy">
+            <span class="dest-icon">💊</span>
+            <span class="dest-name">Pharmacy</span>
+            <span class="dest-badge">Rx</span>
+          </button>
+
+          <button class="dest-btn" id="btn-ward-a"        data-dest="WARD A"        aria-label="Send to Ward A">
+            <span class="dest-icon">🛏️</span>
+            <span class="dest-name">Ward A</span>
+            <span class="dest-badge">A</span>
+          </button>
+
+          <button class="dest-btn" id="btn-ward-b"        data-dest="WARD B"        aria-label="Send to Ward B">
+            <span class="dest-icon">🛏️</span>
+            <span class="dest-name">Ward B</span>
+            <span class="dest-badge">B</span>
+          </button>
+
+          <button class="dest-btn dest-btn--emergency"    data-dest="EMERGENCY ROOM" id="btn-emergency" aria-label="Send to Emergency Room">
+            <span class="dest-icon">🚨</span>
+            <span class="dest-name">Emergency Room</span>
+            <span class="dest-badge">ER</span>
+          </button>
+        </div>
+
+        <div class="stop-section">
+          <button class="return-btn" id="btn-return" aria-label="Return robot to reception">
+            <span>↩</span>
+            <span>RETURN TO RECEPTION</span>
+          </button>
+          <button class="stop-btn" id="btn-stop" aria-label="Send STOP command">
+            <span class="stop-icon">⏹</span>
+            <span>EMERGENCY STOP</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ── Activity Log ───────────────────────────────────── -->
+      <section class="card card-log" aria-label="Activity Log">
+        <div class="card-header">
+          <span class="card-icon">📋</span>
+          <h2 class="card-title">Activity Log</h2>
+          <button class="clear-btn" id="btn-clear-log" aria-label="Clear log">Clear</button>
+        </div>
+
+        <div class="log-container" id="log-container" role="log" aria-live="polite">
+          <div class="log-empty-state" id="log-empty">
+            <span>No activity yet — send a command to begin</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Last Response Card ─────────────────────────────── -->
+      <section class="card card-response" aria-label="Last Response">
+        <div class="card-header">
+          <span class="card-icon">📡</span>
+          <h2 class="card-title">ESP32 Response</h2>
+        </div>
+
+        <div class="response-box" id="response-box">
+          <pre id="response-json" class="response-json">Waiting for first command…</pre>
+        </div>
+
+        <div class="response-meta">
+          <span class="meta-item" id="resp-status-badge"></span>
+          <span class="meta-item" id="resp-latency"></span>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ── Toast notification ──────────────────────────────────── -->
+    <div class="toast-container" id="toast-container" aria-live="assertive"></div>
+
+    <!-- ── Loading overlay (shown while a command is in-flight) ── -->
+    <div class="cmd-overlay" id="cmd-overlay" hidden aria-hidden="true">
+      <div class="cmd-spinner"></div>
+      <p class="cmd-overlay-text" id="cmd-overlay-text">Sending command…</p>
+    </div>
+
+  </div><!-- end .app-wrapper -->
+
+  <script src="script.js"></script>
+</body>
+</html>
