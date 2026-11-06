@@ -66,15 +66,16 @@ const float OBSTACLE_CLEAR_THRESHOLD_CM = 25.0f; // >= 25cm required to resume
 volatile float currentDistanceCm = -1.0f;
 volatile bool obstacleDetected = false;
 
-// ---------- CALIBRATION: PRESERVED FROM YOUR TEST ----------
+// ---------- CALIBRATION: TUNED FOR PAYLOAD / EXTRA WEIGHT ----------
 const float COUNTS_PER_CM = 140.0;
 const float TRACK_WIDTH_CM = 14.0;
 const float DISTANCE_CM = 40.0;
 
-const int BASE_PWM = 90;
-const int MIN_PWM = 70;
-const int MAX_PWM = 120;
-const int TURN_PWM = 90;
+// Increased PWM values to provide sufficient motor torque under extra payload weight
+const int BASE_PWM = 115;
+const int MIN_PWM = 90;
+const int MAX_PWM = 150;
+const int TURN_PWM = 115;
 const float KP = 0.7;
 
 const unsigned long MOVE_TIMEOUT = 15000;
