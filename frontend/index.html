@@ -3,19 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CuraBot+ | Hospital Delivery Robot Dashboard</title>
-  <meta name="description" content="CuraBot+ real-time control dashboard for the ESP32-powered miniature hospital delivery robot." />
+  <title>CuraBot+ | Clinical Logistics Instrument</title>
+  <meta name="description" content="CuraBot+ clinical logistics control dashboard for ESP32 autonomous hospital logistics and medication delivery robot." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-  <!-- ── Background particles (purely decorative) ── -->
-  <div class="bg-grid" aria-hidden="true"></div>
-  <div class="bg-glow glow-blue"  aria-hidden="true"></div>
-  <div class="bg-glow glow-cyan"  aria-hidden="true"></div>
 
   <div class="app-wrapper">
 
@@ -24,297 +19,359 @@
     ═══════════════════════════════════════════════════════ -->
     <header class="header">
       <div class="header-brand">
-        <div class="brand-icon" aria-hidden="true">
-          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- Robot body -->
-            <rect x="10" y="18" width="28" height="22" rx="4" fill="url(#robotGrad)" />
-            <!-- Robot head -->
-            <rect x="14" y="8"  width="20" height="12" rx="3" fill="url(#robotGrad)" />
-            <!-- Eyes -->
-            <circle cx="19" cy="14" r="2.5" fill="#00f5d4" />
-            <circle cx="29" cy="14" r="2.5" fill="#00f5d4" />
-            <!-- Cross (medical) -->
-            <rect x="21" y="23" width="6" height="12" rx="1.5" fill="white" opacity="0.9"/>
-            <rect x="18" y="26" width="12" height="6"  rx="1.5" fill="white" opacity="0.9"/>
-            <!-- Wheels -->
-            <circle cx="16" cy="40" r="4" fill="#1a2a4a" stroke="#00f5d4" stroke-width="1.5"/>
-            <circle cx="32" cy="40" r="4" fill="#1a2a4a" stroke="#00f5d4" stroke-width="1.5"/>
-            <defs>
-              <linearGradient id="robotGrad" x1="10" y1="8" x2="38" y2="40" gradientUnits="userSpaceOnUse">
-                <stop offset="0%"   stop-color="#0ea5e9" />
-                <stop offset="100%" stop-color="#0369a1" />
-              </linearGradient>
-            </defs>
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+            <circle cx="8" cy="16" r="1.5" fill="currentColor"></circle>
+            <circle cx="16" cy="16" r="1.5" fill="currentColor"></circle>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            <line x1="12" y1="2" x2="12" y2="4"></line>
           </svg>
         </div>
-        <div class="brand-text">
-          <h1 class="brand-name">CuraBot<span class="brand-plus">+</span></h1>
-          <p class="brand-tagline">Autonomous Hospital Delivery &amp; RFID Medication Guard</p>
+        <div class="brand-info">
+          <div class="brand-title-row">
+            <h1 class="brand-name">CuraBot<span class="brand-plus">+</span></h1>
+            <span class="brand-tag">Clinical Logistics</span>
+          </div>
+          <p class="brand-tagline">Autonomous Hospital Dispatch &amp; Medication Security</p>
         </div>
       </div>
 
-      <div class="header-status">
-        <div class="connection-badge" id="connection-badge">
+      <div class="header-meta">
+        <div class="esp32-url-chip" id="esp32-url-chip" title="ESP32 Target Endpoint">
+          <span class="chip-label">NODE</span>
+          <span class="chip-value mono" id="esp32-url-text">—</span>
+        </div>
+        <div class="connection-badge disconnected" id="connection-badge">
           <span class="conn-dot" id="conn-dot"></span>
           <span class="conn-label" id="conn-label">Checking…</span>
-        </div>
-        <div class="esp32-url-chip" id="esp32-url-chip" title="ESP32 Target URL">
-          <span class="chip-icon">⚡</span>
-          <span id="esp32-url-text">—</span>
         </div>
       </div>
     </header>
 
     <!-- ═══════════════════════════════════════════════════════
-         MAIN GRID
+         MAIN TWO-COLUMN GRID
     ═══════════════════════════════════════════════════════ -->
     <main class="main-grid">
 
-      <!-- ── Left Column: Robot Status Card ─────────────────── -->
-      <section class="card card-status" aria-label="Robot Status">
-        <div class="card-header">
-          <span class="card-icon">🤖</span>
-          <h2 class="card-title">Robot Status</h2>
-        </div>
+      <!-- ── Left Column: Dispatch & Navigation Controls ─────── -->
+      <div class="main-column">
+        <section class="card card-commands" aria-label="New Delivery and Navigation">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 class="card-title">New Delivery Task</h2>
+              <span class="card-subtitle">Configure payload and dispatch CuraBot+ to destination unit</span>
+            </div>
+          </div>
 
-        <div class="robot-state-display">
-          <div class="state-ring-wrapper" id="state-ring-wrapper">
-            <div class="state-ring" id="state-ring">
-              <div class="state-ring-inner">
-                <span class="state-emoji" id="state-emoji">⏸</span>
-                <span class="state-label" id="state-label">IDLE</span>
+          <!-- Active obstacle warning notice when paused -->
+          <div class="command-obstacle-warning" id="cmd-obs-warning" hidden>
+            <span class="notice-icon" aria-hidden="true">!</span>
+            <span class="notice-text" id="cmd-obs-warning-text">Obstacle detected within 20 cm — Robot paused</span>
+          </div>
+
+          <!-- Lid open warning notice -->
+          <div class="command-lid-warning" id="cmd-lid-warning" hidden>
+            <span class="notice-icon" aria-hidden="true">!</span>
+            <span class="notice-text" id="cmd-lid-warning-text">Medicine compartment is OPEN. Scan the same RFID card to close it before returning.</span>
+          </div>
+
+          <!-- Delivery Task Form -->
+          <div class="task-form-section">
+            <div class="form-group">
+              <label class="form-label" for="task-supply">Medication / Supply Payload</label>
+              <select class="form-select" id="task-supply" aria-label="Select medication or supply">
+                <option value="Stat IV Antibiotics">Stat IV Antibiotics (Cefazolin 2g)</option>
+                <option value="O- Negative Blood Units">O- Negative PRBC Blood Pack (2 Units)</option>
+                <option value="Analgesic Package">Post-Op Analgesic Medication Pack</option>
+                <option value="Cardiac Emergency Kit">Cardiac Emergency Drug Kit</option>
+                <option value="Stat Pathology Specimens">Pathology Lab Specimens (Cold Box)</option>
+                <option value="General Surgical Supplies">Sterile Surgical Dressing Materials</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <span class="form-label">Priority Level</span>
+              <div class="priority-segment-group" role="radiogroup" aria-label="Delivery Priority">
+                <label class="priority-option">
+                  <input type="radio" name="delivery-priority" value="Routine" checked />
+                  <span class="priority-chip">
+                    <span class="priority-marker routine" aria-hidden="true"></span>
+                    <span>Routine</span>
+                  </span>
+                </label>
+                <label class="priority-option">
+                  <input type="radio" name="delivery-priority" value="Medicine" />
+                  <span class="priority-chip">
+                    <span class="priority-marker medicine" aria-hidden="true"></span>
+                    <span>Medicine</span>
+                  </span>
+                </label>
+                <label class="priority-option">
+                  <input type="radio" name="delivery-priority" value="Blood" />
+                  <span class="priority-chip">
+                    <span class="priority-marker blood" aria-hidden="true"></span>
+                    <span>Blood</span>
+                  </span>
+                </label>
+                <label class="priority-option">
+                  <input type="radio" name="delivery-priority" value="Emergency" />
+                  <span class="priority-chip">
+                    <span class="priority-marker emergency" aria-hidden="true"></span>
+                    <span>Emergency</span>
+                  </span>
+                </label>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- ── Ultrasonic Obstacle Detection Component ── -->
-        <div class="obstacle-card-section" id="obstacle-section" aria-live="polite">
-          <div class="obstacle-header-row">
-            <div class="obstacle-title-wrap">
-              <span class="obstacle-icon-indicator" id="obs-icon">🛡️</span>
-              <div>
-                <div class="obstacle-section-title">Obstacle Guard</div>
-                <div class="obstacle-status-sub" id="obs-status-sub">Path Clear</div>
-              </div>
+          <div class="form-group">
+            <span class="form-label destination-section-label">Target Destination Unit</span>
+            <div class="destination-grid">
+              <button class="dest-btn" id="btn-pharmacy" data-dest="PHARMACY" aria-label="Dispatch to Pharmacy">
+                <div class="dest-top-row">
+                  <span class="dest-code">RX-01</span>
+                  <span class="dest-status-pill" id="pill-pharmacy">READY</span>
+                </div>
+                <span class="dest-name">Central Pharmacy</span>
+              </button>
+
+              <button class="dest-btn" id="btn-ward-a" data-dest="WARD A" aria-label="Dispatch to Ward A">
+                <div class="dest-top-row">
+                  <span class="dest-code">WA-02</span>
+                  <span class="dest-status-pill" id="pill-ward-a">READY</span>
+                </div>
+                <span class="dest-name">General Ward A</span>
+              </button>
+
+              <button class="dest-btn" id="btn-ward-b" data-dest="WARD B" aria-label="Dispatch to Ward B">
+                <div class="dest-top-row">
+                  <span class="dest-code">WB-03</span>
+                  <span class="dest-status-pill" id="pill-ward-b">READY</span>
+                </div>
+                <span class="dest-name">Intensive Ward B</span>
+              </button>
+
+              <button class="dest-btn dest-btn--emergency" data-dest="EMERGENCY ROOM" id="btn-emergency" aria-label="Dispatch to Emergency Room">
+                <div class="dest-top-row">
+                  <span class="dest-code">ER-04</span>
+                  <span class="dest-status-pill" id="pill-emergency">READY</span>
+                </div>
+                <span class="dest-name">Emergency Room</span>
+              </button>
             </div>
-            <span class="obstacle-badge clear" id="obs-badge">CLEAR</span>
           </div>
 
-          <div class="obstacle-metric-grid">
-            <div class="obs-metric-box">
-              <span class="obs-metric-label">Front Distance</span>
-              <div class="obs-distance-val-wrap">
-                <span class="obs-distance-val mono" id="obs-distance-val">—</span>
-                <span class="obs-distance-unit" id="obs-distance-unit">cm</span>
-              </div>
+          <div class="stop-section">
+            <button class="return-btn" id="btn-return" aria-label="Return robot to reception">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 3L2 6l3 3"></path>
+                <path d="M2 6h8a3 3 0 0 1 3 3v4"></path>
+              </svg>
+              <span>RETURN TO BASE</span>
+            </button>
+            <button class="stop-btn" id="btn-stop" aria-label="Emergency Stop">
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true">
+                <rect x="3" y="3" width="10" height="10" rx="1"></rect>
+              </svg>
+              <span>EMERGENCY STOP</span>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── Right Column: Telemetry & Security ─────────────── -->
+      <div class="main-column">
+
+        <!-- Robot Status & Obstacle Telemetry -->
+        <section class="card card-status" aria-label="Robot Status and Telemetry">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 class="card-title">Live Robot Status</h2>
+              <span class="card-subtitle">Real-time telemetry, state machine and obstacle guard</span>
             </div>
-            <div class="obs-metric-box">
-              <span class="obs-metric-label">Proximity State</span>
-              <span class="obs-safety-state mono" id="obs-safety-state">CLEAR</span>
+          </div>
+
+          <!-- Robot State Machine Status -->
+          <div class="robot-state-bar">
+            <span class="state-meta-label">NAVIGATION STATE</span>
+            <div class="state-ring-wrapper" id="state-ring-wrapper">
+              <div class="state-ring idle" id="state-ring">
+                <div class="state-ring-inner">
+                  <span class="state-emoji" id="state-emoji" aria-hidden="true">⏸</span>
+                  <span class="state-label" id="state-label">IDLE</span>
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- Active Obstacle Warning Alert Bar -->
           <div class="obstacle-alert-banner" id="obs-alert-banner" hidden>
-            <span class="obs-alert-pulse"></span>
+            <span class="obs-alert-pulse" aria-hidden="true"></span>
             <span class="obs-alert-msg" id="obs-alert-msg">Obstacle detected — Robot paused</span>
           </div>
-        </div>
 
-        <div class="status-details">
-          <div class="detail-row">
-            <span class="detail-key">Obstacle Status</span>
-            <span class="detail-val mono" id="detail-obstacle">Path Clear</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-key">Distance</span>
-            <span class="detail-val mono" id="detail-distance">—</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-key">Last Command</span>
-            <span class="detail-val mono" id="detail-last-cmd">—</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-key">Destination</span>
-            <span class="detail-val mono" id="detail-destination">—</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-key">Commands Sent</span>
-            <span class="detail-val mono" id="detail-cmd-count">0</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-key">Robot Uptime</span>
-            <span class="detail-val mono" id="detail-uptime">—</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-key">ESP32 IP</span>
-            <span class="detail-val mono" id="detail-ip">—</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- ── Right Column: Medicine Compartment & RFID Security ─ -->
-      <section class="card card-compartment" aria-label="Medicine Compartment and RFID Security">
-        <div class="card-header">
-          <span class="card-icon">🔐</span>
-          <h2 class="card-title">Medicine Compartment &amp; RFID Guard</h2>
-          <span class="compartment-live-pill locked" id="comp-live-pill">LOCKED (30°)</span>
-        </div>
-
-        <div class="compartment-display-grid">
-          <!-- Left: Compartment Servo / Lock Visual State -->
-          <div class="compartment-visual-box" id="comp-visual-box">
-            <div class="lock-visual-wrapper" id="comp-lock-wrap">
-              <span class="lock-large-icon" id="comp-lock-icon">🔒</span>
-              <div class="servo-angle-badge" id="comp-servo-badge">30° CLOSED</div>
+          <!-- Ultrasonic Obstacle Detection Component -->
+          <div class="obstacle-card-section" id="obstacle-section" aria-live="polite">
+            <div class="obstacle-header-row">
+              <div class="obstacle-title-wrap">
+                <span class="obstacle-icon-indicator" id="obs-icon" aria-hidden="true">🛡️</span>
+                <div>
+                  <div class="obstacle-section-title">HC-SR04 Obstacle Guard</div>
+                  <div class="obstacle-status-sub" id="obs-status-sub">Path Clear</div>
+                </div>
+              </div>
+              <span class="obstacle-badge clear" id="obs-badge">CLEAR</span>
             </div>
-            <div class="compartment-main-text">
+
+            <div class="obstacle-metric-grid">
+              <div class="obs-metric-box">
+                <span class="obs-metric-label">Front Clearance</span>
+                <div class="obs-distance-val-wrap">
+                  <span class="obs-distance-val mono" id="obs-distance-val">—</span>
+                  <span class="obs-distance-unit" id="obs-distance-unit">cm</span>
+                </div>
+              </div>
+              <div class="obs-metric-box">
+                <span class="obs-metric-label">Hysteresis State</span>
+                <span class="obs-safety-state mono" id="obs-safety-state">CLEAR</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Telemetry Table -->
+          <div class="status-details">
+            <div class="detail-row">
+              <span class="detail-key">Obstacle Sensor</span>
+              <span class="detail-val mono" id="detail-obstacle">Path Clear</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-key">Sensor Distance</span>
+              <span class="detail-val mono" id="detail-distance">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-key">Last Command</span>
+              <span class="detail-val mono" id="detail-last-cmd">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-key">Current Location</span>
+              <span class="detail-val mono" id="detail-destination">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-key">Commands Count</span>
+              <span class="detail-val mono" id="detail-cmd-count">0</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-key">System Uptime</span>
+              <span class="detail-val mono" id="detail-uptime">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-key">Robot IP Address</span>
+              <span class="detail-val mono" id="detail-ip">—</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Current Delivery & Medicine Compartment Security -->
+        <section class="card card-compartment" aria-label="Medicine Compartment and RFID Security">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 class="card-title">Medicine Compartment &amp; RFID Guard</h2>
+              <span class="card-subtitle">RC522 dual-scan authentication &amp; SG90 servo lock</span>
+            </div>
+            <span class="compartment-live-pill locked" id="comp-live-pill">LOCKED (30°)</span>
+          </div>
+
+          <div class="compartment-display-grid">
+            <div class="compartment-visual-box" id="comp-visual-box">
+              <div class="lock-visual-wrapper" id="comp-lock-wrap">
+                <span class="lock-large-icon" id="comp-lock-icon" aria-hidden="true">🔒</span>
+                <div class="servo-angle-badge mono" id="comp-servo-badge">30° CLOSED</div>
+              </div>
               <div class="compartment-state-headline" id="comp-headline">Medicine Compartment Secured</div>
               <div class="compartment-state-sub" id="comp-subtext">Lid locked at 30° — Awaiting destination arrival</div>
             </div>
+
+            <div class="auth-details-panel">
+              <div class="auth-row">
+                <span class="auth-label">Delivery Target</span>
+                <span class="auth-value mono" id="auth-dest">—</span>
+              </div>
+              <div class="auth-row">
+                <span class="auth-label">Delivery Stage</span>
+                <span class="auth-stage-badge idle" id="auth-delivery-stage">AT BASE</span>
+              </div>
+              <div class="auth-row">
+                <span class="auth-label">RFID Auth Status</span>
+                <span class="auth-value mono" id="auth-access-status">WAITING FOR DELIVERY</span>
+              </div>
+              <div class="auth-row">
+                <span class="auth-label">Compartment Lid</span>
+                <span class="auth-value mono" id="auth-lid-status">LOCKED (30°)</span>
+              </div>
+              <div class="auth-row">
+                <span class="auth-label">Medication Dispensed</span>
+                <span class="auth-value mono" id="auth-dispense-status">PENDING</span>
+              </div>
+            </div>
           </div>
 
-          <!-- Right: Delivery Authentication Specs -->
-          <div class="auth-details-panel">
-            <div class="auth-row">
-              <span class="auth-label">Delivery Target</span>
-              <span class="auth-value mono" id="auth-dest">—</span>
-            </div>
-            <div class="auth-row">
-              <span class="auth-label">Delivery Stage</span>
-              <span class="auth-stage-badge idle" id="auth-delivery-stage">AT BASE</span>
-            </div>
-            <div class="auth-row">
-              <span class="auth-label">RFID Auth Status</span>
-              <span class="auth-value mono" id="auth-access-status">WAITING FOR DELIVERY</span>
-            </div>
-            <div class="auth-row">
-              <span class="auth-label">Compartment Lid</span>
-              <span class="auth-value mono" id="auth-lid-status">LOCKED (30°)</span>
-            </div>
-            <div class="auth-row">
-              <span class="auth-label">Medication Dispensed</span>
-              <span class="auth-value mono" id="auth-dispense-status">PENDING</span>
-            </div>
+          <div class="rfid-event-banner" id="rfid-event-banner" hidden>
+            <span class="rfid-event-icon" id="rfid-event-icon" aria-hidden="true">ℹ️</span>
+            <span class="rfid-event-msg" id="rfid-event-msg">Scan authorized RFID card at destination</span>
           </div>
-        </div>
+        </section>
 
-        <!-- Dynamic Context Alert Banner (Access Denied / Awaiting Scan / Dispensed Notice) -->
-        <div class="rfid-event-banner" id="rfid-event-banner" hidden>
-          <span class="rfid-event-icon" id="rfid-event-icon">ℹ️</span>
-          <span class="rfid-event-msg" id="rfid-event-msg">Scan authorized RFID card at destination</span>
-        </div>
-      </section>
+      </div>
 
-      <!-- ── Right Column: Command Center ───────────────────── -->
-      <section class="card card-commands" aria-label="Command Center">
+      <!-- ── Full-Width Row: Activity Log Table ──────────────── -->
+      <section class="card card-log" aria-label="Activity and Access Audit Log">
         <div class="card-header">
-          <span class="card-icon">🏥</span>
-          <h2 class="card-title">Dispatch Destination</h2>
-        </div>
-        <p class="card-subtitle">Select an authorized hospital unit to dispatch CuraBot+</p>
-
-        <!-- Persistent obstacle warning bar when paused -->
-        <div class="command-obstacle-warning" id="cmd-obs-warning" hidden>
-          <span class="warn-icon">⚠️</span>
-          <span class="warn-text" id="cmd-obs-warning-text">Obstacle detected within 20 cm — Robot paused</span>
+          <div class="card-title-group">
+            <h2 class="card-title">Activity &amp; Access Audit Log</h2>
+            <span class="card-subtitle">Real-time state transitions, obstacle events and RFID authentication logs</span>
+          </div>
+          <button class="clear-btn" id="btn-clear-log" aria-label="Clear activity log">Clear Log</button>
         </div>
 
-        <!-- Lid Open Warning Notice (Prevents moving/returning until closed) -->
-        <div class="command-lid-warning" id="cmd-lid-warning" hidden>
-          <span class="warn-icon">⚠️</span>
-          <span class="warn-text" id="cmd-lid-warning-text">Medicine compartment is OPEN. Scan the same RFID card to close it before returning.</span>
-        </div>
-
-        <div class="destination-grid">
-          <button class="dest-btn" id="btn-pharmacy" data-dest="PHARMACY" aria-label="Send to Pharmacy">
-            <span class="dest-icon">💊</span>
-            <div class="dest-text-wrap">
-              <span class="dest-name">Pharmacy</span>
-              <span class="dest-status-pill" id="pill-pharmacy">READY</span>
+        <div class="log-table-wrap">
+          <div class="log-table-head">
+            <span class="log-col-status">STS</span>
+            <span class="log-col-msg">Event / Log Record</span>
+            <span class="log-col-time">Time (IST)</span>
+          </div>
+          <div class="log-container" id="log-container" role="log" aria-live="polite">
+            <div class="log-empty-state" id="log-empty">
+              <span>No activity recorded yet — dispatch a delivery or test emergency stop</span>
             </div>
-            <span class="dest-badge">Rx</span>
-          </button>
-
-          <button class="dest-btn" id="btn-ward-a" data-dest="WARD A" aria-label="Send to Ward A">
-            <span class="dest-icon">🛏️</span>
-            <div class="dest-text-wrap">
-              <span class="dest-name">Ward A</span>
-              <span class="dest-status-pill" id="pill-ward-a">READY</span>
-            </div>
-            <span class="dest-badge">A</span>
-          </button>
-
-          <button class="dest-btn" id="btn-ward-b" data-dest="WARD B" aria-label="Send to Ward B">
-            <span class="dest-icon">🛏️</span>
-            <div class="dest-text-wrap">
-              <span class="dest-name">Ward B</span>
-              <span class="dest-status-pill" id="pill-ward-b">READY</span>
-            </div>
-            <span class="dest-badge">B</span>
-          </button>
-
-          <button class="dest-btn dest-btn--emergency" data-dest="EMERGENCY ROOM" id="btn-emergency" aria-label="Send to Emergency Room">
-            <span class="dest-icon">🚨</span>
-            <div class="dest-text-wrap">
-              <span class="dest-name">Emergency Room</span>
-              <span class="dest-status-pill" id="pill-emergency">READY</span>
-            </div>
-            <span class="dest-badge">ER</span>
-          </button>
-        </div>
-
-        <div class="stop-section">
-          <button class="return-btn" id="btn-return" aria-label="Return robot to reception">
-            <span>↩</span>
-            <span>RETURN TO RECEPTION</span>
-          </button>
-          <button class="stop-btn" id="btn-stop" aria-label="Send STOP command">
-            <span class="stop-icon">⏹</span>
-            <span>EMERGENCY STOP</span>
-          </button>
-        </div>
-      </section>
-
-      <!-- ── Right Column: Activity Log ─────────────────────── -->
-      <section class="card card-log" aria-label="Activity Log">
-        <div class="card-header">
-          <span class="card-icon">📋</span>
-          <h2 class="card-title">Activity Log</h2>
-          <button class="clear-btn" id="btn-clear-log" aria-label="Clear log">Clear</button>
-        </div>
-
-        <div class="log-container" id="log-container" role="log" aria-live="polite">
-          <div class="log-empty-state" id="log-empty">
-            <span>No activity yet — send a command to begin</span>
           </div>
         </div>
       </section>
 
-      <!-- ── Bottom Row: Last Response Card ─────────────────── -->
-      <section class="card card-response" aria-label="Last Response">
+      <!-- ── Full-Width Row: ESP32 Diagnostic Response ──────── -->
+      <section class="card card-response" aria-label="ESP32 Telemetry Diagnostics">
         <div class="card-header">
-          <span class="card-icon">📡</span>
-          <h2 class="card-title">ESP32 Telemetry &amp; Response</h2>
+          <div class="card-title-group">
+            <h2 class="card-title">ESP32 Telemetry &amp; Response Diagnostics</h2>
+            <span class="card-subtitle">Raw JSON payload from robot HTTP endpoint</span>
+          </div>
+          <div class="response-meta">
+            <span class="meta-item" id="resp-status-badge">Waiting…</span>
+            <span class="meta-item mono" id="resp-latency">—</span>
+          </div>
         </div>
 
         <div class="response-box" id="response-box">
           <pre id="response-json" class="response-json">Waiting for telemetry…</pre>
         </div>
-
-        <div class="response-meta">
-          <span class="meta-item" id="resp-status-badge"></span>
-          <span class="meta-item" id="resp-latency"></span>
-        </div>
       </section>
 
     </main>
 
-    <!-- ── Toast notification ──────────────────────────────────── -->
+    <!-- ── Toast notifications ──────────────────────────────── -->
     <div class="toast-container" id="toast-container" aria-live="assertive"></div>
 
-    <!-- ── Loading overlay (shown while a command is in-flight) ── -->
+    <!-- ── Command Overlay ──────────────────────────────────── -->
     <div class="cmd-overlay" id="cmd-overlay" hidden aria-hidden="true">
       <div class="cmd-spinner"></div>
       <p class="cmd-overlay-text" id="cmd-overlay-text">Sending command…</p>
